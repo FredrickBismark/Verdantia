@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { DashboardPage } from './pages/DashboardPage'
+import { GardensPage } from './pages/GardensPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { PlantsPage } from './pages/PlantsPage'
 import { WeatherPage } from './pages/WeatherPage'
@@ -12,6 +13,7 @@ const App = (): React.ReactElement => {
     <AppShell>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/gardens" element={<GardensPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/plants" element={<PlantsPage />} />
         <Route path="/plants/:id" element={<PlantsPage />} />
