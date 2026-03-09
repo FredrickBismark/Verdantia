@@ -1,0 +1,117 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from verdanta.core.database import get_db
+from verdanta.models.plant import DossierSection, PlantDataSource, PlantSpecies
+from verdanta.schemas.plant import (
+    PlantDetailResponse,
+    PlantSpeciesCreate,
+    PlantSpeciesResponse,
+    PlantSpeciesUpdate,
+)
+
+router = APIRouter()
+
+
+@router.get("/plants", response_model=dict)
+async def list_plants(
+    skip: int = 0,
+    limit: int = 20,
+    search: str | None = None,
+    growth_habit: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    query = select(PlantSpecies)
+    if search:
+        query = query.where(PlantSpecies.common_name.ilike(f"%{search}%"))
+    if growth_habit:
+        query = query.where(PlantSpecies.growth_habit == growth_habit)
+    result = await db.execute(query.offset(skip).limit(limit))
+    plants = result.scalars().all()
+    count_result = await db.execute(query)
+    total = len(count_result.scalars().all())
+    return {"data": [PlantSpeciesResponse.model_validate(p) for p in plants], "count": total}
+
+
+@router.post("/plants", response_model=dict, status_code=201)
+async def create_plant(
+    plant_in: PlantSpeciesCreate,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    plant = PlantSpecies(**plant_in.model_dump())
+    db.add(plant)
+    await db.flush()
+    await db.refresh(plant)
+    return {"data": PlantSpeciesResponse.model_validate(plant)}
+
+
+@router.get("/plants/{plant_id}", response_model=dict)
+async def get_plant(
+    plant_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(PlantSpecies)
+        .where(PlantSpecies.id == plant_id)
+        .options(
+            selectinload(PlantSpecies.dossier_sections),
+            selectinload(PlantSpecies.data_sources),
+        )
+    )
+    plant = result.scalar_one_or_none()
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    return {"data": PlantDetailResponse.model_validate(plant)}
+
+
+@router.put("/plants/{plant_id}", response_model=dict)
+async def update_plant(
+    plant_id: int,
+    plant_in: PlantSpeciesUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    plant = await db.get(PlantSpecies, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    for field, value in plant_in.model_dump(exclude_unset=True).items():
+        setattr(plant, field, value)
+    await db.flush()
+    await db.refresh(plant)
+    return {"data": PlantSpeciesResponse.model_validate(plant)}
+
+
+@router.delete("/plants/{plant_id}", status_code=204)
+async def delete_plant(
+    plant_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    plant = await db.get(PlantSpecies, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    await db.delete(plant)
+
+
+@router.post("/plants/{plant_id}/curate", response_model=dict)
+async def curate_plant(
+    plant_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    plant = await db.get(PlantSpecies, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    # TODO: Trigger curation pipeline (Phase 2)
+    return {"data": {"status": "curation_queued", "plant_id": plant_id}}
+
+
+@router.get("/plants/{plant_id}/sources", response_model=dict)
+async def get_plant_sources(
+    plant_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(PlantDataSource).where(PlantDataSource.species_id == plant_id)
+    )
+    sources = result.scalars().all()
+    return {"data": sources}

@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - VERDANTA_DATABASE_URL=sqlite+aiosqlite:///data/verdanta.db
+      - VERDANTA_DATA_DIR=/app/data
+      - VERDANTA_PHOTO_DIR=/app/data/photos
+      - VERDANTA_OLLAMA_BASE_URL=http://ollama:11434
+      - VERDANTA_MQTT_BROKER_HOST=mosquitto
+    depends_on:
+      - ollama
+      - mosquitto
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          memory: 8G
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+volumes:
+  ollama_data:
