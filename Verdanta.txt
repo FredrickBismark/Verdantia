@@ -48,3 +48,924 @@
 ---
 
 ## DIRECTORY STRUCTURE
+
+---
+
+## DATABASE MODELS — COMPLETE SPECIFICATION
+
+All models use SQLAlchemy 2.0 `DeclarativeBase` with `Mapped` and `mapped_column`. 
+Use `datetime` from Python stdlib. Store all timestamps as UTC.
+Use JSON columns (SQLAlchemy `JSON` type) for flexible structured data.
+
+### Garden
+
+```python
+class Garden(Base):
+    __tablename__ = "gardens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    latitude: Mapped[float]
+    longitude: Mapped[float]
+    elevation_m: Mapped[float | None]
+    usda_zone: Mapped[str | None] = mapped_column(String(10))
+    soil_type_default: Mapped[str | None] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    # Relationships
+    plantings: Mapped[list["Planting"]] = relationship(back_populates="garden", cascade="all, delete-orphan")
+    calendar_events: Mapped[list["CalendarEvent"]] = relationship(back_populates="garden", cascade="all, delete-orphan")
+    weather_records: Mapped[list["WeatherRecord"]] = relationship(back_populates="garden", cascade="all, delete-orphan")
+    sensor_readings: Mapped[list["SensorReading"]] = relationship(back_populates="garden", cascade="all, delete-orphan")
+    soil_tests: Mapped[list["SoilTest"]] = relationship(back_populates="garden", cascade="all, delete-orphan")
+
+class PlantSpecies(Base):
+    __tablename__ = "plant_species"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    common_name: Mapped[str] = mapped_column(String(255))
+    scientific_name: Mapped[str | None] = mapped_column(String(255))
+    family: Mapped[str | None] = mapped_column(String(100))
+    variety: Mapped[str | None] = mapped_column(String(255))
+    growth_habit: Mapped[str | None] = mapped_column(String(50))  # annual, perennial, biennial
+    days_to_maturity_min: Mapped[int | None]
+    days_to_maturity_max: Mapped[int | None]
+    optimal_soil_ph_min: Mapped[float | None]
+    optimal_soil_ph_max: Mapped[float | None]
+    sun_requirement: Mapped[str | None] = mapped_column(String(50))  # full_sun, partial_shade, full_shade
+    water_requirement: Mapped[str | None] = mapped_column(String(50))  # low, moderate, high
+    frost_tolerance: Mapped[str | None] = mapped_column(String(50))  # tender, semi_hardy, hardy
+    min_temp_c: Mapped[float | None]
+    max_temp_c: Mapped[float | None]
+    spacing_cm: Mapped[int | None]
+    depth_cm: Mapped[int | None]
+    companion_plants: Mapped[dict | None] = mapped_column(JSON)
+    antagonist_plants: Mapped[dict | None] = mapped_column(JSON)
+    
+    # LLM curation metadata
+    curation_status: Mapped[str] = mapped_column(String(50), default="raw")  # raw, curated, verified_by_user
+    last_curated_at: Mapped[datetime | None]
+    curation_model: Mapped[str | None] = mapped_column(String(100))
+    
+    custom_fields: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    # Relationships
+    plantings: Mapped[list["Planting"]] = relationship(back_populates="species")
+    data_sources: Mapped[list["PlantDataSource"]] = relationship(back_populates="species", cascade="all, delete-orphan")
+    dossier_sections: Mapped[list["DossierSection"]] = relationship(back_populates="species", cascade="all, delete-orphan")
+
+class PlantDataSource(Base):
+    __tablename__ = "plant_data_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    species_id: Mapped[int] = mapped_column(ForeignKey("plant_species.id"))
+    source_type: Mapped[str] = mapped_column(String(50))  # openfarm, user_import, web_search, manual_entry, extension_service
+    source_name: Mapped[str] = mapped_column(String(255))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    raw_data: Mapped[dict] = mapped_column(JSON)
+    confidence_score: Mapped[float | None]  # 0.0-1.0, assigned by LLM
+    ingested_at: Mapped[datetime] = mapped_column(default=func.now())
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    species: Mapped["PlantSpecies"] = relationship(back_populates="data_sources")
+
+class DossierSection(Base):
+    __tablename__ = "dossier_sections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    species_id: Mapped[int] = mapped_column(ForeignKey("plant_species.id"))
+    section_type: Mapped[str] = mapped_column(String(50))
+    # Valid section_types: overview, planting, watering, soil, fertilization,
+    # pruning, harvest, pests, diseases, companions, local_notes,
+    # contradictions, user_notes
+    title: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)  # markdown
+    confidence: Mapped[str] = mapped_column(String(20))  # high, medium, low, contradicted
+    source_ids: Mapped[list | None] = mapped_column(JSON)  # list of PlantDataSource IDs
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_localized: Mapped[bool] = mapped_column(default=False)
+    last_updated: Mapped[datetime] = mapped_column(default=func.now())
+
+    species: Mapped["PlantSpecies"] = relationship(back_populates="dossier_sections")
+
+class Planting(Base):
+    __tablename__ = "plantings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    species_id: Mapped[int] = mapped_column(ForeignKey("plant_species.id"))
+    bed_or_location: Mapped[str | None] = mapped_column(String(255))
+    quantity: Mapped[int] = mapped_column(default=1)
+    date_seeded: Mapped[date | None]
+    date_transplanted: Mapped[date | None]
+    date_first_harvest: Mapped[date | None]
+    date_last_harvest: Mapped[date | None]
+    date_removed: Mapped[date | None]
+    status: Mapped[str] = mapped_column(String(50), default="planned")  # planned, seeded, transplanted, active, harvesting, removed, failed
+    notes: Mapped[str | None] = mapped_column(Text)
+    custom_fields: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+    garden: Mapped["Garden"] = relationship(back_populates="plantings")
+    species: Mapped["PlantSpecies"] = relationship(back_populates="plantings")
+    calendar_events: Mapped[list["CalendarEvent"]] = relationship(back_populates="planting")
+    photos: Mapped[list["Photo"]] = relationship(back_populates="planting", cascade="all, delete-orphan")
+    harvest_logs: Mapped[list["HarvestLog"]] = relationship(back_populates="planting", cascade="all, delete-orphan")
+
+class CalendarEvent(Base):
+    __tablename__ = "calendar_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    planting_id: Mapped[int | None] = mapped_column(ForeignKey("plantings.id"))
+    event_type: Mapped[str] = mapped_column(String(50))
+    # Valid event_types: seed_indoor, seed_outdoor, transplant, water, fertilize,
+    # prune, harvest, pest_check, soil_test, frost_protection, mulch,
+    # weed, trellis, cover_crop, general, custom
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    scheduled_date: Mapped[date]
+    scheduled_time: Mapped[time | None]
+    recurrence_rule: Mapped[str | None] = mapped_column(String(255))  # iCal RRULE format
+    completed: Mapped[bool] = mapped_column(default=False)
+    completed_at: Mapped[datetime | None]
+    source: Mapped[str] = mapped_column(String(50), default="manual")  # manual, auto_generated, llm_recommendation
+    priority: Mapped[str | None] = mapped_column(String(20))  # low, medium, high, critical
+    weather_dependent: Mapped[bool] = mapped_column(default=False)
+    color: Mapped[str | None] = mapped_column(String(7))  # hex color for calendar display
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    garden: Mapped["Garden"] = relationship(back_populates="calendar_events")
+    planting: Mapped["Planting | None"] = relationship(back_populates="calendar_events")
+
+class WeatherRecord(Base):
+    __tablename__ = "weather_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    timestamp: Mapped[datetime]
+    record_type: Mapped[str] = mapped_column(String(20))  # historical, forecast, current
+    source: Mapped[str] = mapped_column(String(50))  # open_meteo, manual, iot_sensor
+    sensor_id: Mapped[str | None] = mapped_column(String(100))
+    temp_c: Mapped[float | None]
+    temp_min_c: Mapped[float | None]
+    temp_max_c: Mapped[float | None]
+    humidity_pct: Mapped[float | None]
+    precipitation_mm: Mapped[float | None]
+    wind_speed_kmh: Mapped[float | None]
+    soil_temp_c: Mapped[float | None]
+    soil_moisture_pct: Mapped[float | None]
+    uv_index: Mapped[float | None]
+    cloud_cover_pct: Mapped[float | None]
+    frost_risk: Mapped[bool | None]
+    raw_data: Mapped[dict | None] = mapped_column(JSON)
+    fetched_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    garden: Mapped["Garden"] = relationship(back_populates="weather_records")
+
+class SensorReading(Base):
+    __tablename__ = "sensor_readings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    sensor_id: Mapped[str] = mapped_column(String(100))
+    sensor_type: Mapped[str] = mapped_column(String(50))  # temperature, humidity, soil_moisture, soil_ph, light, rain_gauge
+    value: Mapped[float]
+    unit: Mapped[str] = mapped_column(String(20))
+    timestamp: Mapped[datetime]
+    location: Mapped[str | None] = mapped_column(String(255))
+
+    garden: Mapped["Garden"] = relationship(back_populates="sensor_readings")
+
+class Photo(Base):
+    __tablename__ = "photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    planting_id: Mapped[int | None] = mapped_column(ForeignKey("plantings.id"))
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    file_path: Mapped[str] = mapped_column(String(500))
+    thumbnail_path: Mapped[str | None] = mapped_column(String(500))
+    caption: Mapped[str | None] = mapped_column(Text)
+    taken_at: Mapped[datetime]
+    tags: Mapped[list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    planting: Mapped["Planting | None"] = relationship(back_populates="photos")
+
+class HarvestLog(Base):
+    __tablename__ = "harvest_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    planting_id: Mapped[int] = mapped_column(ForeignKey("plantings.id"))
+    harvest_date: Mapped[date]
+    quantity: Mapped[float]
+    unit: Mapped[str] = mapped_column(String(20))  # kg, lbs, count, bunches, liters
+    quality_rating: Mapped[int | None]  # 1-5
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    planting: Mapped["Planting"] = relationship(back_populates="harvest_logs")
+
+class SoilTest(Base):
+    __tablename__ = "soil_tests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    location: Mapped[str | None] = mapped_column(String(255))
+    test_date: Mapped[date]
+    ph: Mapped[float | None]
+    nitrogen_ppm: Mapped[float | None]
+    phosphorus_ppm: Mapped[float | None]
+    potassium_ppm: Mapped[float | None]
+    organic_matter_pct: Mapped[float | None]
+    texture: Mapped[str | None] = mapped_column(String(50))  # sandy, loam, clay, silt, sandy_loam, clay_loam
+    notes: Mapped[str | None] = mapped_column(Text)
+    raw_data: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    garden: Mapped["Garden"] = relationship(back_populates="soil_tests")
+
+class LLMInteraction(Base):
+    __tablename__ = "llm_interactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    planting_id: Mapped[int | None] = mapped_column(ForeignKey("plantings.id"))
+    interaction_type: Mapped[str] = mapped_column(String(50))  # chat, curation, alert, diagnosis, schedule_generation
+    user_prompt: Mapped[str] = mapped_column(Text)
+    system_context: Mapped[str] = mapped_column(Text)  # what data was injected for transparency
+    response: Mapped[str] = mapped_column(Text)
+    model_used: Mapped[str] = mapped_column(String(100))
+    provider: Mapped[str] = mapped_column(String(50))
+    timestamp: Mapped[datetime] = mapped_column(default=func.now())
+    feedback: Mapped[str | None] = mapped_column(String(20))  # helpful, not_helpful, incorrect
+    tokens_used: Mapped[int | None]
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)  # JSON-encoded
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+
+SERVICE LAYER — IMPLEMENTATION DETAILS
+LLM Service (services/llm_service.py)
+This is the most critical service. It abstracts multiple LLM providers behind a common interface.
+
+Supported providers:
+
+Ollama (local, free, default) — uses Ollama HTTP API at http://localhost:11434
+Anthropic (Claude models) — uses anthropic Python SDK natively
+OpenAI — uses openai Python SDK
+Venice.ai — uses OpenAI-compatible API at https://api.venice.ai/api/v1
+OpenRouter — uses OpenAI-compatible API at https://openrouter.ai/api/v1
+Custom — any OpenAI-compatible endpoint with user-provided base URL
+
+class LLMProvider(str, Enum):
+    OLLAMA = "ollama"
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
+    VENICE = "venice"
+    OPENROUTER = "openrouter"
+    CUSTOM = "custom"
+
+class LLMConfig(BaseModel):
+    provider: LLMProvider
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    temperature: float = 0.3
+    max_tokens: int = 4096
+
+class LLMClient(ABC):
+    @abstractmethod
+    async def generate(self, prompt: str, system: str | None = None,
+                       images: list[str] | None = None,
+                       response_format: str | None = None) -> str: ...
+    @abstractmethod
+    async def stream(self, prompt: str, system: str | None = None) -> AsyncIterator[str]: ...
+
+Implementation classes:
+
+OllamaClient — POST to /api/generate (non-chat) and /api/chat (chat mode)
+AnthropicClient — native anthropic.AsyncAnthropic SDK, handles vision via content blocks
+OpenAICompatibleClient — works for OpenAI, Venice, OpenRouter, Custom via openai.AsyncOpenAI with custom base_url
+Factory function: create_llm_client(config: LLMConfig) -> LLMClient
+
+Task-specific model resolution:
+The service checks AppSettings for llm_task_overrides. If a specific task (e.g., dossier_curation, daily_chat, photo_diagnosis, proactive_alerts) has an override, use that provider/model. Otherwise fall back to the default.
+
+Provider presets (used by the frontend model selector):
+
+PROVIDER_PRESETS = {
+    "ollama": {
+        "base_url": "http://localhost:11434",
+        "requires_api_key": False,
+        "models": [
+            {"id": "llama3:8b", "name": "Llama 3 8B", "vision": False},
+            {"id": "llama3.1:8b", "name": "Llama 3.1 8B", "vision": False},
+            {"id": "mistral:7b", "name": "Mistral 7B", "vision": False},
+            {"id": "gemma2:9b", "name": "Gemma 2 9B", "vision": False},
+            {"id": "llava:13b", "name": "LLaVA 13B (Vision)", "vision": True},
+        ]
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com",
+        "requires_api_key": True,
+        "models": [
+            {"id": "claude-opus-4-20250514", "name": "Claude Opus 4", "vision": True},
+            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "vision": True},
+            {"id": "claude-haiku-3", "name": "Claude Haiku 3", "vision": True},
+        ]
+    },
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "requires_api_key": True,
+        "models": [
+            {"id": "gpt-4o", "name": "GPT-4o", "vision": True},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "vision": True},
+        ]
+    },
+    "venice": {
+        "base_url": "https://api.venice.ai/api/v1",
+        "requires_api_key": True,
+        "models": [
+            {"id": "llama-3.3-70b", "name": "Llama 3.3 70B", "vision": False},
+        ]
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "requires_api_key": True,
+        "models": []  # fetched dynamically from OpenRouter API
+    },
+}
+
+Plant Curation Service (services/plant_curation_service.py)
+This is the intelligence engine for building plant dossiers.
+
+Pipeline when a user adds a new plant:
+
+Gather raw data:
+
+User-provided import data (CSV, JSON, or manual form entry)
+OpenFarm API scrape (if enabled in settings)
+LLM web search for local/regional data (if enabled and LLM supports search)
+LLM's own training knowledge as fallback
+Store all raw sources as PlantDataSource records with source_type, source_name, source_url, and raw_data JSON.
+
+LLM curation step:
+
+Construct a detailed prompt containing ALL raw sources + the user's garden context (zone, location, soil type)
+Ask the LLM to synthesize a structured dossier with these sections:
+Overview (botanical info, growth habit, maturity timeline)
+Planting Instructions (localized to zone, indoor start, direct sow, transplant timing)
+Soil Optimization (localized, references user's actual soil test data if available)
+Watering Guide (frequency, amount, method, seasonal changes)
+Fertilization Schedule
+Pruning & Training (if applicable)
+Harvest Guide (signs of readiness, method, storage)
+Pest Management (region-specific, organic + conventional)
+Disease Management (region-specific, prevention + treatment)
+Companion Planting
+Local Performance Notes (zone-specific cultivar data)
+Each section has a confidence level: high, medium, low
+Contradictions between sources are explicitly flagged with the conflicting claims, which sources made them, and the LLM's assessment
+Store the curated dossier by populating PlantSpecies structured fields + creating DossierSection records for each section.
+
+Refresh capability: Users can re-run curation at any time (e.g., new season, new soil test data, want updated local info). The pipeline re-gathers, re-curates, and updates.
+
+The LLM curation prompt must instruct the model to return structured JSON matching a defined schema so it can be programmatically parsed and stored.
+
+OpenFarm Service (services/openfarm_service.py)
+Queries the OpenFarm REST API at https://openfarm.cc/api/v1/crops.
+
+Search: GET /crops?filter={query}
+Detail: GET /crops/{slug}
+Normalize the response into a standard dict format compatible with the curation pipeline.
+Handle API being down gracefully (it's a community project, not always reliable).
+Weather Service (services/weather_service.py)
+Uses the Open-Meteo API (free, no API key required).
+
+Endpoints used:
+
+Current weather: https://api.open-meteo.com/v1/forecast with current_weather=true
+Forecast (up to 16 days): same endpoint with daily and hourly parameters
+Historical: https://archive-api.open-meteo.com/v1/archive with date ranges (data back to 1940)
+Variables to request: temperature_2m, temperature_2m_max, temperature_2m_min, relative_humidity_2m, precipitation_sum, wind_speed_10m, soil_temperature_0cm, soil_moisture_0_to_1cm, uv_index, cloud_cover
+
+Background sync: APScheduler job runs every 6 hours (configurable) to fetch and store forecast data. Historical data is fetched on-demand or when a new garden is created.
+
+Data blending priority for display:
+
+Local IoT sensors (most accurate for microclimate)
+Manual user entries
+Open-Meteo API data
+Computed values:
+
+Growing Degree Days (GDD): accumulated from daily min/max temps against a base temperature
+Frost date estimation: based on historical data for the location
+USDA hardiness zone: derived from coordinates using historical min temp data
+Calendar Service (services/calendar_service.py)
+Auto-schedule generation:
+Given a Planting and its associated PlantSpecies + Garden:
+
+Look up average last spring frost and first fall frost for the zone
+Calculate indoor seed start date (if applicable): last_frost - (days specified in species data)
+Calculate transplant or direct sow date
+Generate recurring care events based on species care instructions
+Estimate harvest window from days-to-maturity + planting date
+Return list of proposed CalendarEvent objects for user approval
+Weather-responsive rescheduling:
+A scheduled task compares upcoming CalendarEvent records (where weather_dependent=True) against the current forecast:
+
+Frost warning + tender transplant scheduled → flag with "critical" priority, suggest delay
+Heavy rain + scheduled watering → suggest skip
+Extended drought + moisture-loving crops → suggest extra watering
+Extreme heat + planned outdoor work → suggest early morning
+These generate advisory notifications, not automatic changes. The user decides.
+
+Filter system:
+The API supports filtering calendar events by:
+
+plant_id / planting_id (single or multiple)
+event_type (single or multiple)
+date_range (start, end)
+status (completed, pending, overdue)
+priority
+source (manual, auto, llm)
+weather_dependent
+Garden Advisor Service (integrated into services/llm_service.py)
+The advisor builds rich context before every LLM interaction:
+
+Context assembly for a garden-level query:
+
+- Garden: name, location, zone, soil profile
+- Current weather + 14-day forecast summary
+- All active plantings with current status
+- Recent sensor readings (last 24-48 hours)
+- Upcoming calendar events (next 14 days)
+- Recent harvest data
+- Any active alerts or flagged issues
+
+Context assembly for a plant-specific query:
+All of the above, PLUS:
+
+Full dossier for the specific plant
+Photo history for the plant
+All harvest logs for the plant
+Season-over-season comparison if multi-year data exists
+Relevant LLM interaction history (previous advice given about this plant)
+Proactive alerts (background task):
+Run daily via APScheduler:
+
+Assemble full garden context
+Send to LLM with prompt: "Review this garden's current state. Identify any concerns, time-sensitive actions, or recommendations. Return as a JSON array of alerts with priority, category, and actionable description."
+Store alerts for display on the dashboard
+Photo diagnosis:
+Accept a photo (base64) + planting context. Send to a vision-capable LLM with the prompt to diagnose potential issues (pests, diseases, nutrient deficiencies). Requires a vision-capable model — the service checks if the current model supports vision and falls back or warns if not.
+
+Sensor Service (services/sensor_service.py)
+MQTT integration:
+
+Connect to a local Mosquitto broker (configurable host/port)
+Subscribe to a configurable topic pattern (default: verdanta/sensors/#)
+Expected message format: JSON with sensor_id, sensor_type, value, unit, optional location
+Parse and store as SensorReading records
+Manual entry:
+API endpoint accepts the same data structure for users without IoT hardware who want to manually log thermometer readings or other observations.
+
+Sensor management:
+Track known sensors, their types, locations, and last-seen timestamps. Alert if a sensor hasn't reported in an expected timeframe.
+
+Photo Service (services/photo_service.py)
+Accept image uploads via multipart form
+Store originals in {data_dir}/photos/{garden_id}/{planting_id}/{timestamp}_{uuid}.{ext}
+Generate thumbnails using Pillow (max 400px on longest side)
+Store thumbnail path alongside original
+Extract EXIF data for taken_at timestamp if available, otherwise use upload time
+Serve photos via a static file route or dedicated endpoint
+API ROUTES
+All routes are prefixed with /api/v1/.
+
+Gardens
+GET /gardens — list all gardens
+POST /gardens — create garden
+GET /gardens/{id} — get garden with summary stats
+PUT /gardens/{id} — update garden
+DELETE /gardens/{id} — delete garden and all associated data
+Plants (Species)
+GET /plants — list all plant species (with search/filter)
+POST /plants — create plant species (triggers curation pipeline if LLM enabled)
+GET /plants/{id} — get plant with full dossier
+PUT /plants/{id} — update plant
+DELETE /plants/{id} — delete plant
+POST /plants/{id}/curate — trigger LLM curation/refresh for this plant
+GET /plants/{id}/sources — get all raw data sources for this plant
+POST /plants/import — bulk import from CSV/JSON
+Plantings
+GET /gardens/{garden_id}/plantings — list plantings (with status filter)
+POST /gardens/{garden_id}/plantings — create planting (optionally auto-generate calendar events)
+GET /plantings/{id} — get planting detail
+PUT /plantings/{id} — update planting
+DELETE /plantings/{id} — delete planting
+Calendar
+GET /gardens/{garden_id}/events — list events with full filter support (query params: plant_id, event_type, start_date, end_date, status, priority, source)
+POST /gardens/{garden_id}/events — create event
+GET /events/{id} — get event detail
+PUT /events/{id} — update event
+DELETE /events/{id} — delete event
+POST /events/{id}/complete — mark event completed
+POST /gardens/{garden_id}/events/generate — auto-generate schedule for a planting
+GET /gardens/{garden_id}/events/weather-alerts — get weather-impacted events
+Weather
+GET /gardens/{garden_id}/weather/current — current conditions (API + sensors blended)
+GET /gardens/{garden_id}/weather/forecast — 14-day forecast
+GET /gardens/{garden_id}/weather/historical — historical data (query params: start_date, end_date)
+POST /gardens/{garden_id}/weather/sync — trigger manual weather data sync
+GET /gardens/{garden_id}/weather/frost-dates — estimated frost dates
+GET /gardens/{garden_id}/weather/gdd — growing degree days
+Sensors
+GET /gardens/{garden_id}/sensors — list known sensors
+GET /gardens/{garden_id}/sensors/{sensor_id}/readings — get readings (query: start, end, limit)
+POST /gardens/{garden_id}/sensors/reading — manual sensor entry
+GET /gardens/{garden_id}/sensors/status — connection status of all sensors
+Photos
+POST /plantings/{planting_id}/photos — upload photo
+GET /plantings/{planting_id}/photos — list photos for a planting
+GET /photos/{id} — get photo metadata
+GET /photos/{id}/file — serve actual image file
+GET /photos/{id}/thumbnail — serve thumbnail
+DELETE /photos/{id} — delete photo
+Harvest
+POST /plantings/{planting_id}/harvests — log harvest
+GET /plantings/{planting_id}/harvests — list harvests
+GET /gardens/{garden_id}/harvests/summary — aggregate harvest stats
+Soil Tests
+POST /gardens/{garden_id}/soil-tests — record soil test
+GET /gardens/{garden_id}/soil-tests — list soil tests
+Advisor (LLM)
+POST /gardens/{garden_id}/advisor/chat — send message, get response (with full context injection)
+POST /gardens/{garden_id}/advisor/chat/stream — streaming version via SSE
+GET /gardens/{garden_id}/advisor/alerts — get proactive alerts
+POST /plantings/{planting_id}/advisor/diagnose — photo diagnosis (multipart: image + optional text)
+GET /gardens/{garden_id}/advisor/history — past interactions
+POST /advisor/interactions/{id}/feedback — submit feedback on an interaction
+Settings
+GET /settings — get all settings
+PUT /settings/{key} — update a setting
+GET /settings/llm/providers — get provider presets (for frontend dropdown)
+POST /settings/llm/test — test LLM connection with current config
+GET /settings/llm/ollama/models — list locally available Ollama models
+FRONTEND IMPLEMENTATION DETAILS
+Layout
+The app uses a persistent sidebar navigation with these items:
+
+🏠 Dashboard
+📅 Calendar
+🌱 Plants
+🌤️ Weather
+🤖 Advisor
+⚙️ Settings
+The sidebar collapses to icons on smaller viewports. Main content area fills remaining space.
+
+Dashboard Page
+At-a-glance overview:
+
+Weather widget (current conditions + 3-day mini forecast)
+Active alerts from the LLM advisor (sorted by priority)
+Today's tasks (calendar events for today, with completion checkboxes)
+Quick stats: total active plantings, upcoming harvests, days since last frost
+Season progress bar (based on frost dates)
+Recent photos strip
+Calendar Page
+Default view: month view with FullCalendar
+Events are color-coded by event_type
+Weather icons overlaid on each day (from forecast/historical data)
+Filter panel on the left sidebar: multi-select checkboxes for plant, event type, status, priority
+Click an event to view/edit details
+Click a day to create new event
+Toggle between month/week/day/agenda views
+Timeline sub-view: horizontal swim lanes, one per planting, showing lifecycle events
+Plants Page
+Grid/list toggle view of all plant species
+Search bar with real-time filtering
+Each card shows: photo (if available), common name, variety, growth habit, status badge
+"Add Plant" button opens a form where user enters at minimum the common name
+Optional: variety, import data, enable OpenFarm scrape, enable web search
+On submit: creates species record, triggers curation pipeline, shows progress
+Click a plant card to open the full dossier
+Plant Detail (Dossier) Page
+Tabbed interface:
+
+Overview tab: Species info, growth timeline visualization, current status
+Care tab: All dossier sections rendered as markdown cards, sorted by confidence (high → medium → low → contradicted). Each section shows its confidence badge and source attribution. Contradictions section at the bottom with distinct styling.
+Soil tab: Species soil requirements vs. latest soil test comparison. Gap analysis visualization. Amendment recommendations.
+Photos tab: Chronological gallery with lightbox. Upload button.
+Harvest tab: Log table + yield chart over time. Season comparison if multi-year.
+Notes tab: Free-form markdown editor for user notes.
+Sources tab: Raw data from each PlantDataSource, with source name/URL. Full transparency.
+Confidence badges:
+
+✅ High — green badge
+⚠️ Medium — yellow badge
+❓ Low — gray badge
+⚡ Contradicted — red badge with expandable contradiction details
+Weather Page
+Current conditions card
+14-day forecast chart (temperature line + precipitation bars)
+Historical comparison: overlay current year vs. previous years
+Sensor readings dashboard (if IoT sensors connected)
+GDD accumulation chart
+Frost date indicators
+Advisor Page
+Chat interface (message list + input)
+Context viewer sidebar (collapsible): shows what data was sent to the LLM for the current query. Users can see exactly what the AI knows.
+Model indicator in the header showing current provider/model
+Quick-action buttons: "Review my garden", "What should I do this week?", "Check for issues"
+Plant-specific chat: dropdown to scope the conversation to a specific planting
+Photo upload for diagnosis within the chat
+Settings Page
+Sections:
+
+Garden Location: Map pin or manual lat/lon entry. Auto-detect timezone and USDA zone.
+AI Models: Provider dropdown, model dropdown, API key fields (password inputs), per-task override dropdowns, connection test button.
+Data Sources: Toggle OpenFarm scraping, toggle web search, CSV/JSON import.
+IoT Sensors: MQTT broker config, sensor list with status.
+Weather: Update interval, data retention period.
+Data Management: DB file size, photo storage size. Export all data (JSON). Backup. Restore. Clear data.
+Shared TypeScript Types (types/index.ts)
+Define interfaces that mirror every Pydantic response schema from the backend. Use these consistently in all components and hooks.
+
+CONFIGURATION (backend/src/verdanta/config.py)
+Use pydantic-settings to load from environment variables and .env file:
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="VERDANTA_")
+    
+    # Database
+    database_url: str = "sqlite+aiosqlite:///data/verdanta.db"
+    
+    # Data storage
+    data_dir: str = "data"
+    photo_dir: str = "data/photos"
+    
+    # Server
+    host: str = "0.0.0.0"
+    port: int = 8000
+    
+    # Weather
+    weather_sync_interval_hours: int = 6
+    
+    # MQTT
+    mqtt_broker_host: str = "localhost"
+    mqtt_broker_port: int = 1883
+    mqtt_topic_prefix: str = "verdanta/sensors"
+    mqtt_enabled: bool = False
+    
+    # LLM defaults
+    llm_default_provider: str = "ollama"
+    llm_default_model: str = "llama3:8b"
+    ollama_base_url: str = "http://localhost:11434"
+    
+    # API keys (optional, can also be set via UI)
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    venice_api_key: str | None = None
+    openrouter_api_key: str | None = None
+    
+    # CORS
+    cors_origins: list[str] = ["http://localhost:5173"]  # Vite dev server
+
+SETUP SCRIPT (scripts/setup.sh)
+
+#!/bin/bash
+# One-command setup for Verdanta
+
+set -e
+
+echo "🌱 Setting up Verdanta..."
+
+# Check prerequisites
+command -v python3 >/dev/null 2>&1 || { echo "Python 3.11+ required"; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "Node.js 18+ required"; exit 1; }
+command -v uv >/dev/null 2>&1 || { echo "Installing uv..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
+
+# Backend setup
+cd backend
+uv sync
+uv run alembic upgrade head
+cd ..
+
+# Frontend setup
+cd frontend
+npm install
+cd ..
+
+# Create data directories
+mkdir -p data/photos
+
+# Copy env file if not exists
+cp -n .env.example .env 2>/dev/null || true
+
+echo ""
+echo "✅ Setup complete!"
+echo ""
+echo "To start the backend:  cd backend && uv run uvicorn src.verdanta.main:app --reload"
+echo "To start the frontend: cd frontend && npm run dev"
+echo ""
+echo "Optional: Install Ollama for local LLM support: https://ollama.ai"
+
+DOCKER COMPOSE (docker-compose.yml)
+
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - VERDANTA_DATABASE_URL=sqlite+aiosqlite:///data/verdanta.db
+      - VERDANTA_DATA_DIR=/app/data
+      - VERDANTA_PHOTO_DIR=/app/data/photos
+      - VERDANTA_OLLAMA_BASE_URL=http://ollama:11434
+      - VERDANTA_MQTT_BROKER_HOST=mosquitto
+    depends_on:
+      - ollama
+      - mosquitto
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          memory: 8G
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+volumes:
+  ollama_data:
+
+IMPLEMENTATION ORDER
+Build in this sequence. Each phase produces a working application.
+
+Phase 1: Project Scaffold & Database
+Initialize uv project in backend/ with all dependencies in pyproject.toml
+Initialize Vite + React + TypeScript project in frontend/ with all npm dependencies
+Set up TailwindCSS v4 in frontend
+Create all SQLAlchemy models in backend/src/verdanta/models/
+Set up database.py with async SQLAlchemy engine and session factory
+Create Alembic configuration and initial migration
+Create config.py with pydantic-settings
+Create main.py with FastAPI app, CORS middleware, and lifespan handler
+Create the .env.example and scripts/setup.sh
+Verify: backend starts, database creates, migrations run
+Phase 2: Core CRUD APIs & Basic Frontend
+Implement Pydantic schemas for Garden, PlantSpecies, Planting
+Implement routers: gardens, plants, plantings (full CRUD)
+Build frontend layout: AppShell, Sidebar, routing between pages
+Build Settings page (garden location config)
+Build Plants page (list view, add plant form — basic, no curation yet)
+Build Plant Detail page (basic info display, tabs skeleton)
+Verify: can create a garden, add plants, create plantings through the UI
+Phase 3: LLM Service
+Implement LLMClient abstract base class
+Implement OllamaClient
+Implement AnthropicClient
+Implement OpenAICompatibleClient (covers OpenAI, Venice, OpenRouter, Custom)
+Implement create_llm_client factory
+Implement settings router for LLM config (provider presets endpoint, connection test, Ollama model list)
+Build ModelSelector component in frontend Settings page
+Verify: can configure LLM provider in UI, test connection, send a basic prompt and get response
+Phase 4: Plant Curation Pipeline
+Implement OpenFarmService (search, detail, normalize)
+Implement PlantCurationService:
+Raw data gathering (user import, OpenFarm, LLM web search)
+PlantDataSource storage
+LLM curation prompt construction
+JSON response parsing and DossierSection storage
+Refresh/re-curation flow
+Update plants router: POST triggers curation, GET returns full dossier
+Implement plant import endpoint (CSV/JSON)
+Build full Plant Dossier UI:
+DossierSection component with confidence badges
+ContradictionCard component
+Sources tab showing raw data
+"Refresh Dossier" button
+Verify: add a plant by name → curation runs → dossier displays with sections, confidence levels, and source attribution
+Phase 5: Calendar & Scheduling
+Implement CalendarService:
+Auto-schedule generation from planting + species + frost dates
+Recurrence rule handling
+Filter queries
+Implement calendar router (full CRUD + generate + filter)
+Build Calendar page with FullCalendar
+Build FilterPanel component
+Build EventCard detail modal
+Build timeline view per-planting
+Verify: create a planting → auto-generate schedule → view on calendar → filter → complete events
+Phase 6: Weather Integration
+Implement WeatherService:
+Open-Meteo current/forecast/historical fetching
+Data storage as WeatherRecord
+GDD calculation
+Frost date estimation
+Set up APScheduler background job for weather sync
+Implement weather router
+Build Weather page (current conditions, forecast chart, historical comparison)
+Add weather overlay to Calendar (icons per day)
+Implement weather-responsive event flagging in CalendarService
+Verify: weather data populates automatically, displays on weather page and calendar
+Phase 7: Photos & Harvest Tracking
+Implement PhotoService (upload, thumbnail generation, storage, serving)
+Implement photo router
+Implement harvest router
+Build PhotoGallery component in plant dossier
+Build HarvestTracker component with logging form and yield chart
+Verify: upload photos to a planting, view in gallery, log harvests, see charts
+Phase 8: IoT Sensor Integration
+Implement SensorService with MQTT listener
+Implement sensor router
+Implement manual sensor entry endpoint
+Build SensorStatus component for Weather page
+Build SensorSettings in Settings page
+Implement data blending in WeatherService (sensor priority over API)
+Verify: MQTT messages create SensorReading records, display on weather dashboard, manual entry works
+Phase 9: LLM Advisor
+Implement context builder: assembles full garden state into structured text
+Implement chat endpoint with context injection
+Implement streaming chat via SSE
+Implement proactive alerts background task
+Implement photo diagnosis endpoint
+Implement interaction logging and feedback
+Build ChatInterface component
+Build AlertPanel component for Dashboard
+Build ContextViewer sidebar (shows what data was sent to LLM)
+Verify: chat with advisor shows contextual responses, proactive alerts appear, photo diagnosis works
+Phase 10: Dashboard & Polish
+Build Dashboard page: weather widget, alerts, today's tasks, stats, season progress, recent photos
+Build soil test CRUD (router + UI in plant dossier)
+Implement data export (full JSON export of all data)
+Implement backup/restore
+Season-over-season comparison views
+Docker Compose configuration and Dockerfiles
+README documentation
+Verify: full end-to-end workflow works
+IMPORTANT IMPLEMENTATION NOTES
+Use async throughout the backend. SQLAlchemy async sessions with aiosqlite. All httpx calls use AsyncClient. FastAPI async route handlers.
+
+Error handling: Every external API call (Open-Meteo, OpenFarm, LLM providers) must have proper try/except with timeouts. The app must remain functional even if all external services are down.
+
+The frontend proxies API calls through Vite's dev proxy in development. In production, the FastAPI app serves the built frontend static files.
+
+Photo storage is local filesystem, not database blobs. Store only the path in the database.
+
+LLM curation can be slow (30-120 seconds depending on model). Implement it as a background task with a status polling endpoint, or use SSE to stream progress to the frontend.
+
+All LLM interactions are logged to llm_interactions for transparency and debugging. The user can view what context was sent and provide feedback.
+
+The database should use WAL mode for SQLite to allow concurrent reads during writes: PRAGMA journal_mode=WAL;
+
+API key storage: For the MVP, store in SQLite app_settings table. Encrypt at rest using a local key derived from a machine-specific identifier. This is not bank-grade security but prevents casual exposure.
+
+CORS: In development, allow http://localhost:5173. In production (when serving frontend from FastAPI), CORS is not needed.
+
+No authentication system. This is a local, single-user application. No login, no user accounts, no sessions.
+
+---
+
+This document is self-contained. You can paste it directly as the initial prompt to Claude Code, or save it as `IMPLEMENTATION.md` in the repo root and reference it. It covers every data model field, every API endpoint, every service method signature, every frontend component, and the exact build order.
+
+One thing I'd suggest: when you open Claude Code, start with something like:
+
+> Read IMPLEMENTATION.md. Begin with Phase 1: create the complete project scaffold, all SQLAlchemy models, database setup, Alembic configuration, FastAPI entry point, and the frontend Vite+React+Tailwind skeleton. Make everything runnable.
+
+Then iterate phase by phase. Claude Code will have the full context of what's coming next so it can make good architectural decisions even in early phases.
