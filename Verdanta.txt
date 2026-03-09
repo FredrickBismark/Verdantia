@@ -1,0 +1,50 @@
+# VERDANTA — Implementation Framework
+# Garden Management Application with LLM-Curated Plant Intelligence
+
+## PROJECT IDENTITY
+
+- **Name:** Verdanta
+- **License:** MIT
+- **Language:** Python 3.11+ (backend), TypeScript (frontend)
+- **Target Platform:** Linux Mint on Minisforum UM760 (Ryzen 7 6800H, 16-32GB RAM), but should run on any OS
+- **Deployment:** Local-first, single-user, no cloud dependency required
+- **Repository Structure:** Monorepo
+
+---
+
+## CORE PHILOSOPHY
+
+1. Everything runs locally by default. Cloud APIs (weather, LLM) are optional enhancers with offline fallbacks.
+2. The LLM is not a chatbot bolted on — it is the intelligence layer that curates plant data, generates schedules, and proactively advises.
+3. Data transparency: users can always see what sources informed a recommendation and what the LLM was given as context.
+4. No paywall, no subscription, no telemetry, no cloud accounts required.
+
+---
+
+## TECH STACK — MANDATORY
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Backend framework | FastAPI | Async, auto-generated OpenAPI docs |
+| Python package manager | uv | Fast, lockfile support, replaces pip+venv+poetry |
+| ORM | SQLAlchemy 2.0+ | Async support, mapped_column style |
+| Database | SQLite | Single file, zero config, sufficient for single-user |
+| Migrations | Alembic | Integrated with SQLAlchemy |
+| HTTP client | httpx | Async, used for all external API calls |
+| Task scheduling | APScheduler | Background jobs (weather sync, proactive alerts) |
+| MQTT | aiomqtt | IoT sensor ingestion |
+| Frontend framework | React 18 + TypeScript |  |
+| Frontend build | Vite |  |
+| CSS | TailwindCSS v4 |  |
+| State management | Zustand |  |
+| Data fetching | TanStack React Query v5 |  |
+| Calendar UI | FullCalendar React |  |
+| Charts | Recharts |  |
+| Icons | Lucide React |  |
+| Date utilities | date-fns |  |
+| Markdown rendering | react-markdown |  |
+| Containerization | Docker Compose | Optional, not required for development |
+
+---
+
+## DIRECTORY STRUCTURE
