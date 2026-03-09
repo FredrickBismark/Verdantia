@@ -86,12 +86,36 @@ async def get_provider_presets() -> dict:
 @router.post("/settings/llm/test", response_model=dict)
 async def test_llm_connection(
     test_in: LLMTestRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement LLM connection test (Phase 2)
-    return {"data": {"status": "not_implemented", "message": "LLM test coming in Phase 2"}}
+    from verdanta.services.llm_service import LLMConfig, LLMProvider, LLMService
+
+    config = LLMConfig(
+        provider=LLMProvider(test_in.provider),
+        model=test_in.model,
+        api_key=test_in.api_key,
+        base_url=test_in.base_url,
+    )
+    service = LLMService(db)
+    result = await service.test_connection(config)
+    return {"data": result}
 
 
 @router.get("/settings/llm/ollama/models", response_model=dict)
 async def list_ollama_models() -> dict:
-    # TODO: Query Ollama API for local models (Phase 2)
-    return {"data": []}
+    import httpx
+
+    from verdanta.core.config import settings as app_settings
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{app_settings.ollama_base_url}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            models = [
+                {"id": m["name"], "name": m["name"], "size": m.get("size")}
+                for m in data.get("models", [])
+            ]
+            return {"data": models}
+    except Exception:
+        return {"data": []}

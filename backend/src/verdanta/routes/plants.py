@@ -102,8 +102,21 @@ async def curate_plant(
     plant = await db.get(PlantSpecies, plant_id)
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
-    # TODO: Trigger curation pipeline (Phase 2)
-    return {"data": {"status": "curation_queued", "plant_id": plant_id}}
+
+    from verdanta.services.plant_curation_service import PlantCurationService
+
+    service = PlantCurationService(db)
+    try:
+        curated = await service.curate_species(plant_id)
+        return {
+            "data": {
+                "status": curated.curation_status,
+                "plant_id": plant_id,
+                "model": curated.curation_model,
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Curation failed: {e}") from e
 
 
 @router.get("/plants/{plant_id}/sources", response_model=dict)
