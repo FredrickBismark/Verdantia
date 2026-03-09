@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,7 +58,7 @@ async def get_all_settings(
 ) -> dict:
     result = await db.execute(select(AppSettings))
     settings = result.scalars().all()
-    return {"data": [SettingResponse(key=s.key, value=s.value) for s in settings]}
+    return {"data": [SettingResponse.model_validate(s) for s in settings]}
 
 
 @router.put("/settings/{key}", response_model=dict)
@@ -73,7 +73,8 @@ async def update_setting(
     else:
         db.add(AppSettings(key=key, value=setting_in.value))
     await db.flush()
-    return {"data": SettingResponse(key=key, value=setting_in.value)}
+    setting = await db.get(AppSettings, key)
+    return {"data": SettingResponse.model_validate(setting)}
 
 
 @router.get("/settings/llm/providers", response_model=dict)

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,7 +15,7 @@ class PlantingBase(BaseModel):
     date_removed: date | None = None
     status: str = "planned"
     notes: str | None = None
-    custom_fields: dict | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class PlantingCreate(PlantingBase):
@@ -32,7 +33,7 @@ class PlantingUpdate(BaseModel):
     date_removed: date | None = None
     status: str | None = None
     notes: str | None = None
-    custom_fields: dict | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class PlantingResponse(PlantingBase):

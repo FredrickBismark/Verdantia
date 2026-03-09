@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
@@ -17,8 +17,8 @@ async def list_gardens(
 ) -> dict:
     result = await db.execute(select(Garden).offset(skip).limit(limit))
     gardens = result.scalars().all()
-    count_result = await db.execute(select(Garden))
-    total = len(count_result.scalars().all())
+    count_result = await db.execute(select(func.count()).select_from(Garden))
+    total = count_result.scalar_one()
     return {"data": [GardenResponse.model_validate(g) for g in gardens], "count": total}
 
 

@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +39,8 @@ async def sensor_readings(
         query = query.where(SensorReading.timestamp <= end)
     result = await db.execute(query.order_by(SensorReading.timestamp.desc()).limit(limit))
     readings = result.scalars().all()
-    return {"data": [SensorReadingResponse.model_validate(r) for r in readings], "count": len(readings)}
+    validated = [SensorReadingResponse.model_validate(r) for r in readings]
+    return {"data": validated, "count": len(readings)}
 
 
 @router.post("/gardens/{garden_id}/sensors/reading", response_model=dict, status_code=201)
@@ -50,7 +51,7 @@ async def manual_sensor_entry(
 ) -> dict:
     reading = SensorReading(
         garden_id=garden_id,
-        timestamp=reading_in.timestamp or datetime.utcnow(),
+        timestamp=reading_in.timestamp or datetime.now(UTC),
         **reading_in.model_dump(exclude={"timestamp"}),
     )
     db.add(reading)

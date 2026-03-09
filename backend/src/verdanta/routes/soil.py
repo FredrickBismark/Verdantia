@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
@@ -27,6 +27,9 @@ async def list_soil_tests(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(select(SoilTest).where(SoilTest.garden_id == garden_id))
+    base_query = select(SoilTest).where(SoilTest.garden_id == garden_id)
+    result = await db.execute(base_query)
     tests = result.scalars().all()
-    return {"data": [SoilTestResponse.model_validate(t) for t in tests], "count": len(tests)}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [SoilTestResponse.model_validate(t) for t in tests], "count": total}

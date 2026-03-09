@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
@@ -18,12 +18,14 @@ async def list_plantings(
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    query = select(Planting).where(Planting.garden_id == garden_id)
+    base_query = select(Planting).where(Planting.garden_id == garden_id)
     if status:
-        query = query.where(Planting.status == status)
-    result = await db.execute(query.offset(skip).limit(limit))
+        base_query = base_query.where(Planting.status == status)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     plantings = result.scalars().all()
-    return {"data": [PlantingResponse.model_validate(p) for p in plantings], "count": len(plantings)}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [PlantingResponse.model_validate(p) for p in plantings], "count": total}
 
 
 @router.post("/gardens/{garden_id}/plantings", response_model=dict, status_code=201)

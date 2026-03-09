@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from verdanta.models.base import Base
 
@@ -18,6 +18,12 @@ class LLMInteraction(Base):
     response: Mapped[str] = mapped_column(Text)
     model_used: Mapped[str] = mapped_column(String(100))
     provider: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="completed")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    duration_ms: Mapped[int | None]
     timestamp: Mapped[datetime] = mapped_column(default=func.now())
     feedback: Mapped[str | None] = mapped_column(String(20))
     tokens_used: Mapped[int | None]
+
+    garden: Mapped["Garden"] = relationship()  # noqa: F821
+    planting: Mapped["Planting | None"] = relationship()  # noqa: F821

@@ -2,7 +2,6 @@
 name = "verdanta"
 version = "0.1.0"
 description = "Garden management application with LLM-curated plant intelligence"
-readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
@@ -45,6 +44,7 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # Allow Depends() and Query() in FastAPI signatures
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

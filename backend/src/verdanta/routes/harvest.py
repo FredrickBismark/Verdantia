@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
@@ -27,11 +27,12 @@ async def list_harvests(
     planting_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(HarvestLog).where(HarvestLog.planting_id == planting_id)
-    )
+    base_query = select(HarvestLog).where(HarvestLog.planting_id == planting_id)
+    result = await db.execute(base_query)
     harvests = result.scalars().all()
-    return {"data": [HarvestLogResponse.model_validate(h) for h in harvests], "count": len(harvests)}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [HarvestLogResponse.model_validate(h) for h in harvests], "count": total}
 
 
 @router.get("/gardens/{garden_id}/harvests/summary", response_model=dict)

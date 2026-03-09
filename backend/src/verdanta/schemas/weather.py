@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,6 +23,9 @@ class WeatherRecordResponse(BaseModel):
     uv_index: float | None
     cloud_cover_pct: float | None
     frost_risk: bool | None
+    sensor_id: str | None
+    raw_data: dict[str, Any] | None
+    fetched_at: datetime
 
 
 class SensorReadingCreate(BaseModel):

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
 from verdanta.models.planting import Photo
+from verdanta.schemas.photo import PhotoResponse
 
 router = APIRouter()
 
@@ -22,9 +23,12 @@ async def list_photos(
     planting_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(select(Photo).where(Photo.planting_id == planting_id))
+    base_query = select(Photo).where(Photo.planting_id == planting_id)
+    result = await db.execute(base_query)
     photos = result.scalars().all()
-    return {"data": photos, "count": len(photos)}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [PhotoResponse.model_validate(p) for p in photos], "count": total}
 
 
 @router.get("/photos/{photo_id}", response_model=dict)
@@ -35,7 +39,7 @@ async def get_photo(
     photo = await db.get(Photo, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return {"data": photo}
+    return {"data": PhotoResponse.model_validate(photo)}
 
 
 @router.delete("/photos/{photo_id}", status_code=204)

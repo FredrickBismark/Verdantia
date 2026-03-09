@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, String, Text, func
+from sqlalchemy import String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from verdanta.models.base import Base

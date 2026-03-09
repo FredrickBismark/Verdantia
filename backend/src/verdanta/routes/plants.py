@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from verdanta.core.database import get_db
-from verdanta.models.plant import DossierSection, PlantDataSource, PlantSpecies
+from verdanta.models.plant import PlantDataSource, PlantSpecies
 from verdanta.schemas.plant import (
+    PlantDataSourceResponse,
     PlantDetailResponse,
     PlantSpeciesCreate,
     PlantSpeciesResponse,
@@ -30,8 +31,8 @@ async def list_plants(
         query = query.where(PlantSpecies.growth_habit == growth_habit)
     result = await db.execute(query.offset(skip).limit(limit))
     plants = result.scalars().all()
-    count_result = await db.execute(query)
-    total = len(count_result.scalars().all())
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = count_result.scalar_one()
     return {"data": [PlantSpeciesResponse.model_validate(p) for p in plants], "count": total}
 
 
@@ -114,4 +115,4 @@ async def get_plant_sources(
         select(PlantDataSource).where(PlantDataSource.species_id == plant_id)
     )
     sources = result.scalars().all()
-    return {"data": sources}
+    return {"data": [PlantDataSourceResponse.model_validate(s) for s in sources]}

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,7 +14,7 @@ class SoilTestCreate(BaseModel):
     organic_matter_pct: float | None = None
     texture: str | None = None
     notes: str | None = None
-    raw_data: dict | None = None
+    raw_data: dict[str, Any] | None = None
 
 
 class SoilTestResponse(BaseModel):
@@ -30,5 +31,5 @@ class SoilTestResponse(BaseModel):
     organic_matter_pct: float | None
     texture: str | None
     notes: str | None
-    raw_data: dict | None
+    raw_data: dict[str, Any] | None
     created_at: datetime
