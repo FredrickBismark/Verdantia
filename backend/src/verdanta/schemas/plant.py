@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -20,9 +21,9 @@ class PlantSpeciesBase(BaseModel):
     max_temp_c: float | None = None
     spacing_cm: int | None = None
     depth_cm: int | None = None
-    companion_plants: dict | None = None
-    antagonist_plants: dict | None = None
-    custom_fields: dict | None = None
+    companion_plants: dict[str, Any] | None = None
+    antagonist_plants: dict[str, Any] | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class PlantSpeciesCreate(PlantSpeciesBase):
@@ -46,9 +47,9 @@ class PlantSpeciesUpdate(BaseModel):
     max_temp_c: float | None = None
     spacing_cm: int | None = None
     depth_cm: int | None = None
-    companion_plants: dict | None = None
-    antagonist_plants: dict | None = None
-    custom_fields: dict | None = None
+    companion_plants: dict[str, Any] | None = None
+    antagonist_plants: dict[str, Any] | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class PlantSpeciesResponse(PlantSpeciesBase):
@@ -71,7 +72,7 @@ class DossierSectionResponse(BaseModel):
     title: str
     content: str
     confidence: str
-    source_ids: list | None
+    source_ids: list[int] | None
     display_order: int
     is_localized: bool
     last_updated: datetime
@@ -85,7 +86,7 @@ class PlantDataSourceResponse(BaseModel):
     source_type: str
     source_name: str
     source_url: str | None
-    raw_data: dict
+    raw_data: dict[str, Any]
     confidence_score: float | None
     ingested_at: datetime
     notes: str | None

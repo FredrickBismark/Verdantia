@@ -1,12 +1,16 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
 from verdanta.models.planting import CalendarEvent
-from verdanta.schemas.calendar import CalendarEventCreate, CalendarEventResponse, CalendarEventUpdate
+from verdanta.schemas.calendar import (
+    CalendarEventCreate,
+    CalendarEventResponse,
+    CalendarEventUpdate,
+)
 
 router = APIRouter()
 
@@ -25,24 +29,26 @@ async def list_events(
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    query = select(CalendarEvent).where(CalendarEvent.garden_id == garden_id)
+    base_query = select(CalendarEvent).where(CalendarEvent.garden_id == garden_id)
     if plant_id:
-        query = query.where(CalendarEvent.planting_id == plant_id)
+        base_query = base_query.where(CalendarEvent.planting_id == plant_id)
     if event_type:
-        query = query.where(CalendarEvent.event_type == event_type)
+        base_query = base_query.where(CalendarEvent.event_type == event_type)
     if start_date:
-        query = query.where(CalendarEvent.scheduled_date >= start_date)
+        base_query = base_query.where(CalendarEvent.scheduled_date >= start_date)
     if end_date:
-        query = query.where(CalendarEvent.scheduled_date <= end_date)
+        base_query = base_query.where(CalendarEvent.scheduled_date <= end_date)
     if completed is not None:
-        query = query.where(CalendarEvent.completed == completed)
+        base_query = base_query.where(CalendarEvent.completed == completed)
     if priority:
-        query = query.where(CalendarEvent.priority == priority)
+        base_query = base_query.where(CalendarEvent.priority == priority)
     if source:
-        query = query.where(CalendarEvent.source == source)
-    result = await db.execute(query.offset(skip).limit(limit))
+        base_query = base_query.where(CalendarEvent.source == source)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     events = result.scalars().all()
-    return {"data": [CalendarEventResponse.model_validate(e) for e in events], "count": len(events)}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [CalendarEventResponse.model_validate(e) for e in events], "count": total}
 
 
 @router.post("/gardens/{garden_id}/events", response_model=dict, status_code=201)
@@ -105,7 +111,7 @@ async def complete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     event.completed = True
-    event.completed_at = datetime.utcnow()
+    event.completed_at = datetime.now(UTC)
     await db.flush()
     await db.refresh(event)
     return {"data": CalendarEventResponse.model_validate(event)}
@@ -118,7 +124,9 @@ async def generate_schedule(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement auto-schedule generation (Phase 3)
-    return {"data": {"status": "not_implemented", "message": "Schedule generation coming in Phase 3"}}
+    return {
+        "data": {"status": "not_implemented", "message": "Schedule generation coming in Phase 3"},
+    }
 
 
 @router.get("/gardens/{garden_id}/events/weather-alerts", response_model=dict)

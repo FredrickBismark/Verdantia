@@ -1,12 +1,24 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from verdanta.core.config import settings
 from verdanta.core.database import init_db
-from verdanta.routes import gardens, plants, plantings, calendar, weather, sensors, photos, harvest, soil, advisor, app_settings
+from verdanta.routes import (
+    advisor,
+    app_settings,
+    calendar,
+    gardens,
+    harvest,
+    photos,
+    plantings,
+    plants,
+    sensors,
+    soil,
+    weather,
+)
 
 
 @asynccontextmanager

@@ -1,9 +1,14 @@
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
 
 
 class SettingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     key: str
     value: str
+    updated_at: datetime
 
 
 class SettingUpdate(BaseModel):
