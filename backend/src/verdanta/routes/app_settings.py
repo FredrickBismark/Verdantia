@@ -74,6 +74,7 @@ async def update_setting(
         db.add(AppSettings(key=key, value=setting_in.value))
     await db.flush()
     setting = await db.get(AppSettings, key)
+    await db.refresh(setting)
     return {"data": SettingResponse.model_validate(setting)}
 
 

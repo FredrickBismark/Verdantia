@@ -6,12 +6,14 @@ import {
   CloudSun,
   Bot,
   Settings,
+  Fence,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home },
-  { to: '/calendar', label: 'Calendar', icon: Calendar },
+  { to: '/gardens', label: 'Gardens', icon: Fence },
   { to: '/plants', label: 'Plants', icon: Sprout },
+  { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/weather', label: 'Weather', icon: CloudSun },
   { to: '/advisor', label: 'Advisor', icon: Bot },
   { to: '/settings', label: 'Settings', icon: Settings },
