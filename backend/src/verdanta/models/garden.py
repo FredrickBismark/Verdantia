@@ -37,3 +37,9 @@ class Garden(Base):
     soil_tests: Mapped[list["SoilTest"]] = relationship(  # noqa: F821
         back_populates="garden", cascade="all, delete-orphan"
     )
+    photos: Mapped[list["Photo"]] = relationship(  # noqa: F821
+        back_populates="garden", cascade="all, delete-orphan"
+    )
+    llm_interactions: Mapped[list["LLMInteraction"]] = relationship(  # noqa: F821
+        back_populates="garden", cascade="all, delete-orphan"
+    )

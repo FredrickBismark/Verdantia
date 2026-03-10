@@ -39,7 +39,9 @@ class PlantSpecies(Base):
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 
     # Relationships
-    plantings: Mapped[list["Planting"]] = relationship(back_populates="species")  # noqa: F821
+    plantings: Mapped[list["Planting"]] = relationship(  # noqa: F821
+        back_populates="species", cascade="all, delete-orphan"
+    )
     data_sources: Mapped[list["PlantDataSource"]] = relationship(
         back_populates="species", cascade="all, delete-orphan"
     )

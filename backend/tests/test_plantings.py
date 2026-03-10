@@ -101,3 +101,27 @@ async def test_delete_planting(app_client: AsyncClient) -> None:
 
     resp = await app_client.get(f"/api/v1/plantings/{planting_id}")
     assert resp.status_code == 404
+
+
+async def test_get_planting_not_found(app_client: AsyncClient) -> None:
+    resp = await app_client.get("/api/v1/plantings/999")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert "detail" in body
+
+
+async def test_cascade_delete_garden_removes_plantings(app_client: AsyncClient) -> None:
+    garden_id = await _create_garden(app_client)
+    species_id = await _create_plant(app_client)
+    await _create_planting(app_client, garden_id, species_id)
+    await _create_planting(app_client, garden_id, species_id)
+
+    resp = await app_client.delete(f"/api/v1/gardens/{garden_id}")
+    assert resp.status_code == 204
+
+    # Plantings should be gone via cascade
+    resp = await app_client.get(f"/api/v1/gardens/{garden_id}/plantings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == 0
+    assert len(body["data"]) == 0

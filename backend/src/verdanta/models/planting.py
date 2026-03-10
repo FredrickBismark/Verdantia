@@ -27,7 +27,9 @@ class Planting(Base):
 
     garden: Mapped["Garden"] = relationship(back_populates="plantings")  # noqa: F821
     species: Mapped["PlantSpecies"] = relationship(back_populates="plantings")  # noqa: F821
-    calendar_events: Mapped[list["CalendarEvent"]] = relationship(back_populates="planting")
+    calendar_events: Mapped[list["CalendarEvent"]] = relationship(
+        back_populates="planting", cascade="all, delete-orphan"
+    )
     photos: Mapped[list["Photo"]] = relationship(
         back_populates="planting", cascade="all, delete-orphan"
     )
@@ -74,6 +76,7 @@ class Photo(Base):
     created_at: Mapped[datetime] = mapped_column(default=func.now())
 
     planting: Mapped["Planting | None"] = relationship(back_populates="photos")
+    garden: Mapped["Garden"] = relationship(back_populates="photos")  # noqa: F821
 
 
 class HarvestLog(Base):

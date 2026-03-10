@@ -124,9 +124,7 @@ async def generate_schedule(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement auto-schedule generation (Phase 3)
-    return {
-        "data": {"status": "not_implemented", "message": "Schedule generation coming in Phase 3"},
-    }
+    raise HTTPException(status_code=501, detail="Schedule generation not yet implemented")
 
 
 @router.get("/gardens/{garden_id}/events/weather-alerts", response_model=dict)
@@ -135,4 +133,4 @@ async def weather_alerts(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement weather-responsive alerts (Phase 3)
-    return {"data": []}
+    raise HTTPException(status_code=501, detail="Weather alerts not yet implemented")

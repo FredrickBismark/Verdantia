@@ -25,5 +25,5 @@ class LLMInteraction(Base):
     feedback: Mapped[str | None] = mapped_column(String(20))
     tokens_used: Mapped[int | None]
 
-    garden: Mapped["Garden"] = relationship()  # noqa: F821
+    garden: Mapped["Garden"] = relationship(back_populates="llm_interactions")  # noqa: F821
     planting: Mapped["Planting | None"] = relationship()  # noqa: F821

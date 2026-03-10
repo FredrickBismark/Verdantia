@@ -25,10 +25,12 @@ async def record_soil_test(
 @router.get("/gardens/{garden_id}/soil-tests", response_model=dict)
 async def list_soil_tests(
     garden_id: int,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     base_query = select(SoilTest).where(SoilTest.garden_id == garden_id)
-    result = await db.execute(base_query)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     tests = result.scalars().all()
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar_one()

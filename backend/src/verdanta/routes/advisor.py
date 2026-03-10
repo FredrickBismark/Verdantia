@@ -20,7 +20,7 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement LLM chat with context injection (Phase 4)
-    return {"data": {"status": "not_implemented", "message": "Advisor coming in Phase 4"}}
+    raise HTTPException(status_code=501, detail="Advisor chat not yet implemented")
 
 
 @router.post("/gardens/{garden_id}/advisor/chat/stream")
@@ -39,7 +39,7 @@ async def get_alerts(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement proactive alerts (Phase 4)
-    return {"data": []}
+    raise HTTPException(status_code=501, detail="Proactive alerts not yet implemented")
 
 
 @router.post("/plantings/{planting_id}/advisor/diagnose", response_model=dict)
@@ -48,7 +48,7 @@ async def diagnose_photo(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement photo diagnosis (Phase 4)
-    return {"data": {"status": "not_implemented"}}
+    raise HTTPException(status_code=501, detail="Photo diagnosis not yet implemented")
 
 
 @router.get("/gardens/{garden_id}/advisor/history", response_model=dict)
