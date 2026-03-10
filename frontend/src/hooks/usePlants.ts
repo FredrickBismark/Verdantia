@@ -47,3 +47,13 @@ export const useDeletePlant = () => {
     },
   });
 };
+
+export const useCuratePlant = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => plantsApi.curate(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['plants'] });
+    },
+  });
+};
