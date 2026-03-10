@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,10 +25,12 @@ async def log_harvest(
 @router.get("/plantings/{planting_id}/harvests", response_model=dict)
 async def list_harvests(
     planting_id: int,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     base_query = select(HarvestLog).where(HarvestLog.planting_id == planting_id)
-    result = await db.execute(base_query)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     harvests = result.scalars().all()
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar_one()
@@ -41,4 +43,4 @@ async def harvest_summary(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement aggregate harvest stats (Phase 5)
-    return {"data": {"total_harvests": 0, "by_plant": {}}}
+    raise HTTPException(status_code=501, detail="Harvest summary not yet implemented")

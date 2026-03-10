@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +17,7 @@ async def list_sensors(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement sensor management (Phase 4)
-    return {"data": []}
+    raise HTTPException(status_code=501, detail="Sensor management not yet implemented")
 
 
 @router.get("/gardens/{garden_id}/sensors/{sensor_id}/readings", response_model=dict)
@@ -66,4 +66,4 @@ async def sensor_status(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement sensor status tracking (Phase 4)
-    return {"data": []}
+    raise HTTPException(status_code=501, detail="Sensor status tracking not yet implemented")

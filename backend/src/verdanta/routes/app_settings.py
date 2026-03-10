@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
@@ -58,7 +58,9 @@ async def get_all_settings(
 ) -> dict:
     result = await db.execute(select(AppSettings))
     settings = result.scalars().all()
-    return {"data": [SettingResponse.model_validate(s) for s in settings]}
+    count_result = await db.execute(select(func.count()).select_from(AppSettings))
+    total = count_result.scalar_one()
+    return {"data": [SettingResponse.model_validate(s) for s in settings], "count": total}
 
 
 @router.put("/settings/{key}", response_model=dict)
@@ -88,10 +90,10 @@ async def test_llm_connection(
     test_in: LLMTestRequest,
 ) -> dict:
     # TODO: Implement LLM connection test (Phase 2)
-    return {"data": {"status": "not_implemented", "message": "LLM test coming in Phase 2"}}
+    raise HTTPException(status_code=501, detail="LLM connection test not yet implemented")
 
 
 @router.get("/settings/llm/ollama/models", response_model=dict)
 async def list_ollama_models() -> dict:
     # TODO: Query Ollama API for local models (Phase 2)
-    return {"data": []}
+    raise HTTPException(status_code=501, detail="Ollama model listing not yet implemented")

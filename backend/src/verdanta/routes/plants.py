@@ -103,16 +103,19 @@ async def curate_plant(
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
     # TODO: Trigger curation pipeline (Phase 2)
-    return {"data": {"status": "curation_queued", "plant_id": plant_id}}
+    raise HTTPException(status_code=501, detail="Plant curation not yet implemented")
 
 
 @router.get("/plants/{plant_id}/sources", response_model=dict)
 async def get_plant_sources(
     plant_id: int,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(PlantDataSource).where(PlantDataSource.species_id == plant_id)
-    )
+    base_query = select(PlantDataSource).where(PlantDataSource.species_id == plant_id)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     sources = result.scalars().all()
-    return {"data": [PlantDataSourceResponse.model_validate(s) for s in sources]}
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+    return {"data": [PlantDataSourceResponse.model_validate(s) for s in sources], "count": total}

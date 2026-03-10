@@ -7,6 +7,8 @@ async def test_get_settings_empty(app_client: AsyncClient) -> None:
     body = resp.json()
     assert "data" in body
     assert body["data"] == []
+    assert "count" in body
+    assert body["count"] == 0
 
 
 async def test_update_setting(app_client: AsyncClient) -> None:

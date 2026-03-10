@@ -15,16 +15,18 @@ async def upload_photo(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # TODO: Implement photo upload with multipart form (Phase 5)
-    return {"data": {"status": "not_implemented"}}
+    raise HTTPException(status_code=501, detail="Photo upload not yet implemented")
 
 
 @router.get("/plantings/{planting_id}/photos", response_model=dict)
 async def list_photos(
     planting_id: int,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     base_query = select(Photo).where(Photo.planting_id == planting_id)
-    result = await db.execute(base_query)
+    result = await db.execute(base_query.offset(skip).limit(limit))
     photos = result.scalars().all()
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar_one()
