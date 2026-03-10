@@ -181,7 +181,7 @@ export const PlantsPage = (): React.ReactElement => {
   const [editingPlant, setEditingPlant] = useState<PlantSpecies | null>(null);
   const [form, setForm] = useState<PlantFormData>(EMPTY_FORM);
 
-  const { data, isLoading } = usePlants({ search: search || undefined });
+  const { data, isLoading, isError } = usePlants({ search: search || undefined });
   const createPlant = useCreatePlant();
   const updatePlant = useUpdatePlant();
   const deletePlant = useDeletePlant();
@@ -415,7 +415,11 @@ export const PlantsPage = (): React.ReactElement => {
         </div>
       )}
 
-      {isLoading ? (
+      {isError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Failed to load plants. Please check your connection and try again.
+        </div>
+      ) : isLoading ? (
         <div className="text-gray-500 text-sm">Loading plants...</div>
       ) : plants.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -480,7 +484,12 @@ export const PlantsPage = (): React.ReactElement => {
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deletePlant.mutate(plant.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Are you sure you want to delete this plant? All associated plantings will also be removed.')) {
+                            deletePlant.mutate(plant.id);
+                          }
+                        }}
                         className="p-1.5 text-gray-400 hover:text-red-600 rounded"
                       >
                         <Trash2 className="w-4 h-4" />

@@ -15,7 +15,7 @@ const EMPTY_FORM: GardenCreate = {
 };
 
 export const GardensPage = (): React.ReactElement => {
-  const { data, isLoading } = useGardens();
+  const { data, isLoading, isError } = useGardens();
   const createGarden = useCreateGarden();
   const updateGarden = useUpdateGarden();
   const deleteGarden = useDeleteGarden();
@@ -62,6 +62,7 @@ export const GardensPage = (): React.ReactElement => {
   };
 
   const handleDelete = (id: number): void => {
+    if (!window.confirm('Are you sure you want to delete this garden? All plantings in it will also be removed.')) return;
     if (selectedGardenId === id) setSelectedGardenId(null);
     deleteGarden.mutate(id);
   };
@@ -185,7 +186,11 @@ export const GardensPage = (): React.ReactElement => {
         </div>
       )}
 
-      {isLoading ? (
+      {isError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Failed to load gardens. Please check your connection and try again.
+        </div>
+      ) : isLoading ? (
         <div className="text-gray-500 text-sm">Loading gardens...</div>
       ) : gardens.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -264,7 +269,7 @@ const EMPTY_PLANTING: PlantingCreate = {
 };
 
 const PlantingsPanel = ({ gardenId }: { gardenId: number }): React.ReactElement => {
-  const { data: plantingsData, isLoading } = usePlantings(gardenId);
+  const { data: plantingsData, isLoading, isError } = usePlantings(gardenId);
   const { data: plantsData } = usePlants();
   const createPlanting = useCreatePlanting();
   const updatePlanting = useUpdatePlanting();
@@ -429,7 +434,11 @@ const PlantingsPanel = ({ gardenId }: { gardenId: number }): React.ReactElement 
         </div>
       )}
 
-      {isLoading ? (
+      {isError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Failed to load plantings. Please try again.
+        </div>
+      ) : isLoading ? (
         <div className="text-gray-500 text-sm">Loading plantings...</div>
       ) : plantings.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
@@ -472,7 +481,11 @@ const PlantingsPanel = ({ gardenId }: { gardenId: number }): React.ReactElement 
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => deletePlanting.mutate(p.id)}
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this planting?')) {
+                            deletePlanting.mutate(p.id);
+                          }
+                        }}
                         className="p-1.5 text-gray-400 hover:text-red-600 rounded"
                       >
                         <Trash2 className="w-4 h-4" />

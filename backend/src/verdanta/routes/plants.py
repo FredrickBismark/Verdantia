@@ -123,6 +123,8 @@ async def curate_plant(
         )
         plant_detail = result.scalar_one()
         return {"data": PlantDetailResponse.model_validate(plant_detail)}
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Curation failed for plant %d", plant_id)
         raise HTTPException(

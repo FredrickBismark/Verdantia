@@ -10,7 +10,7 @@ class LLMInteraction(Base):
     __tablename__ = "llm_interactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    garden_id: Mapped[int] = mapped_column(ForeignKey("gardens.id"))
+    garden_id: Mapped[int | None] = mapped_column(ForeignKey("gardens.id"))
     planting_id: Mapped[int | None] = mapped_column(ForeignKey("plantings.id"))
     interaction_type: Mapped[str] = mapped_column(String(50))
     user_prompt: Mapped[str] = mapped_column(Text)
@@ -25,5 +25,5 @@ class LLMInteraction(Base):
     feedback: Mapped[str | None] = mapped_column(String(20))
     tokens_used: Mapped[int | None]
 
-    garden: Mapped["Garden"] = relationship(back_populates="llm_interactions")  # noqa: F821
+    garden: Mapped["Garden | None"] = relationship(back_populates="llm_interactions")  # noqa: F821
     planting: Mapped["Planting | None"] = relationship()  # noqa: F821

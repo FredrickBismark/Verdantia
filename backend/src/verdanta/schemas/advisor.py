@@ -27,7 +27,7 @@ class InteractionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    garden_id: int
+    garden_id: int | None
     planting_id: int | None
     interaction_type: str
     user_prompt: str

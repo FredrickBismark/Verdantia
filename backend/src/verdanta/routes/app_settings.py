@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from verdanta.core.database import get_db
 from verdanta.models.settings import AppSettings
 from verdanta.schemas.settings import LLMTestRequest, SettingResponse, SettingUpdate
+from verdanta.services.llm_service import LLMConfig, LLMProvider, OllamaClient, create_llm_client
 
 router = APIRouter()
 
@@ -89,8 +90,6 @@ async def get_provider_presets() -> dict:
 async def test_llm_connection(
     test_in: LLMTestRequest,
 ) -> dict:
-    from verdanta.services.llm_service import LLMConfig, LLMProvider, create_llm_client
-
     config = LLMConfig(
         provider=LLMProvider(test_in.provider),
         model=test_in.model,
@@ -109,8 +108,6 @@ async def test_llm_connection(
 
 @router.get("/settings/llm/ollama/models", response_model=dict)
 async def list_ollama_models() -> dict:
-    from verdanta.services.llm_service import LLMConfig, LLMProvider, OllamaClient
-
     config = LLMConfig(provider=LLMProvider.OLLAMA, model="")
     client = OllamaClient(config)
     try:
