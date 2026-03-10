@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,8 @@ from verdanta.schemas.plant import (
     PlantSpeciesResponse,
     PlantSpeciesUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -102,8 +106,28 @@ async def curate_plant(
     plant = await db.get(PlantSpecies, plant_id)
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
-    # TODO: Trigger curation pipeline (Phase 2)
-    raise HTTPException(status_code=501, detail="Plant curation not yet implemented")
+    try:
+        from verdanta.services.plant_curation_service import (
+            curate_plant as run_curation,
+        )
+
+        await run_curation(plant_id, db)
+        # Reload with relationships
+        result = await db.execute(
+            select(PlantSpecies)
+            .where(PlantSpecies.id == plant_id)
+            .options(
+                selectinload(PlantSpecies.dossier_sections),
+                selectinload(PlantSpecies.data_sources),
+            )
+        )
+        plant_detail = result.scalar_one()
+        return {"data": PlantDetailResponse.model_validate(plant_detail)}
+    except Exception as exc:
+        logger.exception("Curation failed for plant %d", plant_id)
+        raise HTTPException(
+            status_code=502, detail="Curation failed — check LLM provider settings"
+        ) from exc
 
 
 @router.get("/plants/{plant_id}/sources", response_model=dict)

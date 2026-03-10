@@ -24,5 +24,5 @@ export const plantsApi = {
     api.delete<void>(`/plants/${id}`),
 
   curate: (id: number) =>
-    api.post<ApiResponse<{ status: string }>>(`/plants/${id}/curate`),
+    api.post<ApiResponse<PlantDetail>>(`/plants/${id}/curate`),
 };

@@ -89,11 +89,32 @@ async def get_provider_presets() -> dict:
 async def test_llm_connection(
     test_in: LLMTestRequest,
 ) -> dict:
-    # TODO: Implement LLM connection test (Phase 2)
-    raise HTTPException(status_code=501, detail="LLM connection test not yet implemented")
+    from verdanta.services.llm_service import LLMConfig, LLMProvider, create_llm_client
+
+    config = LLMConfig(
+        provider=LLMProvider(test_in.provider),
+        model=test_in.model,
+        api_key=test_in.api_key,
+        base_url=test_in.base_url,
+    )
+    client = create_llm_client(config)
+    success = await client.test_connection()
+    if success:
+        return {"data": {"status": "ok", "message": "Connection successful"}}
+    raise HTTPException(
+        status_code=502,
+        detail="Could not connect to LLM provider",
+    )
 
 
 @router.get("/settings/llm/ollama/models", response_model=dict)
 async def list_ollama_models() -> dict:
-    # TODO: Query Ollama API for local models (Phase 2)
-    raise HTTPException(status_code=501, detail="Ollama model listing not yet implemented")
+    from verdanta.services.llm_service import LLMConfig, LLMProvider, OllamaClient
+
+    config = LLMConfig(provider=LLMProvider.OLLAMA, model="")
+    client = OllamaClient(config)
+    try:
+        models = await client.list_models()
+        return {"data": models}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not connect to Ollama") from exc

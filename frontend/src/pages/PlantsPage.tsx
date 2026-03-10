@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout } from 'lucide-react';
-import { usePlants, usePlant, useCreatePlant, useUpdatePlant, useDeletePlant } from '../hooks/usePlants';
+import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2 } from 'lucide-react';
+import { usePlants, usePlant, useCreatePlant, useUpdatePlant, useDeletePlant, useCuratePlant } from '../hooks/usePlants';
 import type { PlantSpecies } from '../types';
 
 interface PlantFormData {
@@ -39,8 +39,16 @@ const WATER_OPTIONS = ['Low', 'Moderate', 'High'];
 const FROST_OPTIONS = ['Hardy', 'Semi-Hardy', 'Tender'];
 const GROWTH_HABITS = ['Annual', 'Biennial', 'Perennial', 'Vine', 'Shrub', 'Tree'];
 
+const CONFIDENCE_COLORS: Record<string, string> = {
+  high: 'bg-green-100 text-green-700',
+  medium: 'bg-yellow-100 text-yellow-700',
+  low: 'bg-orange-100 text-orange-700',
+  contradicted: 'bg-red-100 text-red-700',
+};
+
 const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void }): React.ReactElement => {
   const { data, isLoading } = usePlant(plantId);
+  const curatePlant = useCuratePlant();
   const plant = data?.data;
 
   if (isLoading) return <div className="text-gray-500 text-sm">Loading...</div>;
@@ -59,12 +67,31 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
               <p className="text-sm text-gray-500 italic">{plant.scientific_name}</p>
             )}
           </div>
-          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-            plant.curation_status === 'curated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-          }`}>
-            {plant.curation_status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+              plant.curation_status === 'curated' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {plant.curation_status}
+            </span>
+            <button
+              onClick={() => curatePlant.mutate(plantId)}
+              disabled={curatePlant.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+            >
+              {curatePlant.isPending ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Curating...</>
+              ) : (
+                <><Sparkles className="w-3.5 h-3.5" /> {plant.curation_status === 'curated' ? 'Re-curate' : 'Curate'}</>
+              )}
+            </button>
+          </div>
         </div>
+
+        {curatePlant.isError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            Curation failed: {curatePlant.error.message}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           {plant.family && <Field label="Family" value={plant.family} />}
@@ -82,18 +109,56 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
           )}
           {plant.spacing_cm && <Field label="Spacing" value={`${plant.spacing_cm} cm`} />}
           {plant.depth_cm && <Field label="Planting Depth" value={`${plant.depth_cm} cm`} />}
+          {plant.curation_model && <Field label="Curated By" value={plant.curation_model} />}
         </div>
 
         {plant.dossier_sections.length > 0 && (
           <div className="mt-6 space-y-4">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Dossier</h3>
-            {plant.dossier_sections.map((section) => (
+            {plant.dossier_sections
+              .sort((a, b) => a.display_order - b.display_order)
+              .map((section) => (
               <div key={section.id} className="border-l-2 border-green-300 pl-4">
-                <h4 className="text-sm font-medium text-gray-900">{section.title}</h4>
-                <p className="text-sm text-gray-600 mt-1">{section.content}</p>
-                <span className="text-xs text-gray-400">Confidence: {section.confidence}</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <h4 className="text-sm font-medium text-gray-900">{section.title}</h4>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    CONFIDENCE_COLORS[section.confidence] ?? 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {section.confidence}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 whitespace-pre-line">{section.content}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {plant.data_sources.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Data Sources</h3>
+            <div className="space-y-2">
+              {plant.data_sources.map((source) => (
+                <div key={source.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-2">
+                  <div>
+                    <span className="font-medium text-gray-900">{source.source_name}</span>
+                    <span className="text-gray-400 ml-2 text-xs">{source.source_type}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {source.confidence_score !== null && (
+                      <span className="text-xs text-gray-500">
+                        {Math.round(source.confidence_score * 100)}% confidence
+                      </span>
+                    )}
+                    {source.source_url && (
+                      <a href={source.source_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline">
+                        View source
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
