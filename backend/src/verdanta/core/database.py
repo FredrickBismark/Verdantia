@@ -32,8 +32,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database with WAL mode for better concurrent access."""
+    """Initialize database — enable WAL mode and FK enforcement."""
     from sqlalchemy import text
 
     async with engine.begin() as conn:
         await conn.execute(text("PRAGMA journal_mode=WAL;"))
+        await conn.execute(text("PRAGMA foreign_keys=ON;"))

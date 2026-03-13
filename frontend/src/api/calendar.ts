@@ -41,7 +41,7 @@ export const calendarApi = {
     ),
 
   weatherAlerts: (gardenId: number) =>
-    api.get<ApiListResponse<CalendarEvent>>(
+    api.post<ApiListResponse<CalendarEvent> & { rescheduled: CalendarEvent[]; rescheduled_count: number }>(
       `/gardens/${gardenId}/events/weather-alerts`,
     ),
 };

@@ -40,7 +40,9 @@ class PlantSpecies(Base):
 
     # Relationships
     plantings: Mapped[list["Planting"]] = relationship(  # noqa: F821
-        back_populates="species", cascade="all, delete-orphan"
+        back_populates="species",
+        cascade="save-update, merge",
+        passive_deletes=True,
     )
     data_sources: Mapped[list["PlantDataSource"]] = relationship(
         back_populates="species", cascade="all, delete-orphan"

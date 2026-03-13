@@ -1,6 +1,8 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,11 +22,34 @@ from verdanta.routes import (
     weather,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from verdanta.services.weather_service import close_http_client, sync_all_gardens
+
     await init_db()
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        sync_all_gardens,
+        "interval",
+        hours=settings.weather_sync_interval_hours,
+        id="weather_sync",
+        replace_existing=True,
+        misfire_grace_time=300,  # allow up to 5-min delay before skipping
+    )
+    scheduler.start()
+    logger.info(
+        "Weather sync scheduler started (interval: %dh)",
+        settings.weather_sync_interval_hours,
+    )
+
     yield
+
+    scheduler.shutdown(wait=False)
+    await close_http_client()
 
 
 app = FastAPI(

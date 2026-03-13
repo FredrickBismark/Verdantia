@@ -231,7 +231,7 @@ async def curate_plant(plant_id: int, db: AsyncSession) -> PlantSpecies:
     from verdanta.models.llm import LLMInteraction
 
     interaction = LLMInteraction(
-        garden_id=1,  # Curation is not garden-specific; use default
+        garden_id=None,  # Curation is not garden-scoped
         interaction_type="plant_curation",
         user_prompt=prompt[:5000],
         system_context=CURATION_SYSTEM_PROMPT,
