@@ -14,6 +14,7 @@ from verdanta.routes import (
     calendar,
     gardens,
     harvest,
+    journal,
     photos,
     plantings,
     plants,
@@ -77,6 +78,7 @@ app.include_router(sensors.router, prefix="/api/v1", tags=["sensors"])
 app.include_router(photos.router, prefix="/api/v1", tags=["photos"])
 app.include_router(harvest.router, prefix="/api/v1", tags=["harvest"])
 app.include_router(soil.router, prefix="/api/v1", tags=["soil"])
+app.include_router(journal.router, prefix="/api/v1", tags=["journal"])
 app.include_router(advisor.router, prefix="/api/v1", tags=["advisor"])
 app.include_router(app_settings.router, prefix="/api/v1", tags=["settings"])
 

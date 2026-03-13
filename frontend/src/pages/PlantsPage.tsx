@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2, Camera, BookOpen, Database, Apple } from 'lucide-react';
 import { usePlants, usePlant, useCreatePlant, useUpdatePlant, useDeletePlant, useCuratePlant } from '../hooks/usePlants';
+import { usePlantings } from '../hooks/usePlantings';
+import { useGardenStore } from '../stores/gardenStore';
+import { PhotoUpload } from '../components/PhotoUpload';
+import { PhotoGallery } from '../components/PhotoGallery';
+import { HarvestLogger } from '../components/HarvestLogger';
+import { HarvestChart } from '../components/HarvestChart';
 import type { PlantSpecies } from '../types';
 
 interface PlantFormData {
@@ -46,10 +52,16 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   contradicted: 'bg-red-100 text-red-700',
 };
 
+type DetailTab = 'overview' | 'photos' | 'harvest' | 'sources';
+
 const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void }): React.ReactElement => {
   const { data, isLoading } = usePlant(plantId);
   const curatePlant = useCuratePlant();
   const plant = data?.data;
+  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  const { selectedGardenId } = useGardenStore();
+  const { data: plantingsData } = usePlantings(selectedGardenId, { limit: 100 });
+  const speciesPlantings = (plantingsData?.data ?? []).filter((p) => p.species_id === plantId);
 
   if (isLoading) return <div className="text-gray-500 text-sm">Loading...</div>;
   if (!plant) return <div className="text-gray-500 text-sm">Plant not found</div>;
@@ -93,72 +105,143 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-          {plant.family && <Field label="Family" value={plant.family} />}
-          {plant.variety && <Field label="Variety" value={plant.variety} />}
-          {plant.growth_habit && <Field label="Growth Habit" value={plant.growth_habit} />}
-          {plant.sun_requirement && <Field label="Sun" value={plant.sun_requirement} />}
-          {plant.water_requirement && <Field label="Water" value={plant.water_requirement} />}
-          {plant.frost_tolerance && <Field label="Frost Tolerance" value={plant.frost_tolerance} />}
-          {(plant.days_to_maturity_min || plant.days_to_maturity_max) && (
-            <Field label="Days to Maturity" value={
-              plant.days_to_maturity_min && plant.days_to_maturity_max
-                ? `${plant.days_to_maturity_min}-${plant.days_to_maturity_max}`
-                : String(plant.days_to_maturity_min ?? plant.days_to_maturity_max)
-            } />
-          )}
-          {plant.spacing_cm && <Field label="Spacing" value={`${plant.spacing_cm} cm`} />}
-          {plant.depth_cm && <Field label="Planting Depth" value={`${plant.depth_cm} cm`} />}
-          {plant.curation_model && <Field label="Curated By" value={plant.curation_model} />}
+        <div className="flex gap-1 border-b border-gray-200 mt-4 mb-4">
+          {([
+            { key: 'overview' as DetailTab, label: 'Overview', icon: BookOpen },
+            { key: 'photos' as DetailTab, label: 'Photos', icon: Camera },
+            { key: 'harvest' as DetailTab, label: 'Harvest', icon: Apple },
+            { key: 'sources' as DetailTab, label: 'Sources', icon: Database },
+          ]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === key
+                  ? 'border-green-600 text-green-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
         </div>
 
-        {plant.dossier_sections.length > 0 && (
-          <div className="mt-6 space-y-4">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Dossier</h3>
-            {plant.dossier_sections
-              .sort((a, b) => a.display_order - b.display_order)
-              .map((section) => (
-              <div key={section.id} className="border-l-2 border-green-300 pl-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="text-sm font-medium text-gray-900">{section.title}</h4>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    CONFIDENCE_COLORS[section.confidence] ?? 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {section.confidence}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 whitespace-pre-line">{section.content}</p>
+        {activeTab === 'overview' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+              {plant.family && <Field label="Family" value={plant.family} />}
+              {plant.variety && <Field label="Variety" value={plant.variety} />}
+              {plant.growth_habit && <Field label="Growth Habit" value={plant.growth_habit} />}
+              {plant.sun_requirement && <Field label="Sun" value={plant.sun_requirement} />}
+              {plant.water_requirement && <Field label="Water" value={plant.water_requirement} />}
+              {plant.frost_tolerance && <Field label="Frost Tolerance" value={plant.frost_tolerance} />}
+              {(plant.days_to_maturity_min || plant.days_to_maturity_max) && (
+                <Field label="Days to Maturity" value={
+                  plant.days_to_maturity_min && plant.days_to_maturity_max
+                    ? `${plant.days_to_maturity_min}-${plant.days_to_maturity_max}`
+                    : String(plant.days_to_maturity_min ?? plant.days_to_maturity_max)
+                } />
+              )}
+              {plant.spacing_cm && <Field label="Spacing" value={`${plant.spacing_cm} cm`} />}
+              {plant.depth_cm && <Field label="Planting Depth" value={`${plant.depth_cm} cm`} />}
+              {plant.curation_model && <Field label="Curated By" value={plant.curation_model} />}
+            </div>
+
+            {plant.dossier_sections.length > 0 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Dossier</h3>
+                {plant.dossier_sections
+                  .sort((a, b) => a.display_order - b.display_order)
+                  .map((section) => (
+                  <div key={section.id} className="border-l-2 border-green-300 pl-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="text-sm font-medium text-gray-900">{section.title}</h4>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        CONFIDENCE_COLORS[section.confidence] ?? 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {section.confidence}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 whitespace-pre-line">{section.content}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+          </>
+        )}
+
+        {activeTab === 'photos' && (
+          <div className="space-y-6">
+            {speciesPlantings.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-6">
+                No plantings found for this species. Create a planting to add photos.
+              </p>
+            ) : (
+              speciesPlantings.map((planting) => (
+                <div key={planting.id} className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">
+                    {planting.bed_or_location ?? `Planting #${planting.id}`}
+                    <span className="text-gray-400 ml-2 text-xs">({planting.status})</span>
+                  </h4>
+                  <PhotoUpload plantingId={planting.id} />
+                  <PhotoGallery plantingId={planting.id} />
+                </div>
+              ))
+            )}
           </div>
         )}
 
-        {plant.data_sources.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Data Sources</h3>
-            <div className="space-y-2">
-              {plant.data_sources.map((source) => (
-                <div key={source.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-2">
-                  <div>
-                    <span className="font-medium text-gray-900">{source.source_name}</span>
-                    <span className="text-gray-400 ml-2 text-xs">{source.source_type}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {source.confidence_score !== null && (
-                      <span className="text-xs text-gray-500">
-                        {Math.round(source.confidence_score * 100)}% confidence
-                      </span>
-                    )}
-                    {source.source_url && (
-                      <a href={source.source_url} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline">
-                        View source
-                      </a>
-                    )}
-                  </div>
+        {activeTab === 'harvest' && (
+          <div className="space-y-6">
+            {speciesPlantings.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-6">
+                No plantings found for this species. Create a planting to log harvests.
+              </p>
+            ) : (
+              speciesPlantings.map((planting) => (
+                <div key={planting.id} className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">
+                    {planting.bed_or_location ?? `Planting #${planting.id}`}
+                    <span className="text-gray-400 ml-2 text-xs">({planting.status})</span>
+                  </h4>
+                  <HarvestLogger plantingId={planting.id} />
+                  <HarvestChart plantingId={planting.id} />
                 </div>
-              ))}
-            </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'sources' && (
+          <div>
+            {plant.data_sources.length > 0 ? (
+              <div className="space-y-2">
+                {plant.data_sources.map((source) => (
+                  <div key={source.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-2">
+                    <div>
+                      <span className="font-medium text-gray-900">{source.source_name}</span>
+                      <span className="text-gray-400 ml-2 text-xs">{source.source_type}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {source.confidence_score !== null && (
+                        <span className="text-xs text-gray-500">
+                          {Math.round(source.confidence_score * 100)}% confidence
+                        </span>
+                      )}
+                      {source.source_url && (
+                        <a href={source.source_url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline">
+                          View source
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-6">No data sources yet.</p>
+            )}
           </div>
         )}
       </div>

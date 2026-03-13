@@ -43,3 +43,6 @@ class Garden(Base):
     llm_interactions: Mapped[list["LLMInteraction"]] = relationship(  # noqa: F821
         back_populates="garden", cascade="all, delete-orphan"
     )
+    journal_entries: Mapped[list["JournalEntry"]] = relationship(  # noqa: F821
+        back_populates="garden", cascade="all, delete-orphan"
+    )

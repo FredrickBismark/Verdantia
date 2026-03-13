@@ -1,7 +1,8 @@
 """Garden advisor service — LLM-powered chat with contextual garden awareness.
 
 Assembles context from garden, active plantings, recent weather, and species
-dossiers before sending to the configured LLM. Logs every interaction.
+dossiers via the ContextProvider protocol. Logs every interaction and writes
+knowledge entries.
 """
 
 import logging
@@ -12,11 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.models.garden import Garden
 from verdanta.models.llm import LLMInteraction
-from verdanta.models.plant import DossierSection, PlantSpecies
-from verdanta.models.planting import Planting
 from verdanta.models.settings import AppSettings
-from verdanta.models.weather import WeatherRecord
 from verdanta.schemas.advisor import ChatResponse
+from verdanta.services.context_providers import ContextChunk, get_default_providers
+from verdanta.services.knowledge_service import write_knowledge_entry
 from verdanta.services.llm_service import create_llm_client, get_llm_config_from_settings
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,22 @@ class AdvisorService:
         await db.flush()
         await db.refresh(interaction)
 
+        # Write knowledge entry for this Q&A pair
+        try:
+            await write_knowledge_entry(
+                db=db,
+                source_type="advisor_conversation",
+                content=f"Q: {message}\nA: {llm_response.text}",
+                garden_id=garden.id,
+                source_id=interaction.id,
+                metadata={
+                    "planting_id": planting_id,
+                    "model": llm_response.model,
+                },
+            )
+        except Exception:
+            logger.warning("Failed to write knowledge entry for advisor chat", exc_info=True)
+
         return ChatResponse(
             response=llm_response.text,
             model_used=llm_response.model,
@@ -91,10 +107,10 @@ class AdvisorService:
         db: AsyncSession,
         planting_id: int | None = None,
     ) -> str:
-        """Build a text context block to inject into the system prompt."""
+        """Build a text context block using registered ContextProviders."""
         parts: list[str] = []
 
-        # Garden overview
+        # Garden overview (always included)
         parts.append(
             f"## Garden: {garden.name}\n"
             f"- Location: {garden.latitude:.4f}°, {garden.longitude:.4f}°\n"
@@ -103,92 +119,28 @@ class AdvisorService:
             f"- Soil type: {garden.soil_type_default or 'unknown'}\n"
         )
 
-        # Active plantings
-        result = await db.execute(
-            select(Planting, PlantSpecies)
-            .join(PlantSpecies, Planting.species_id == PlantSpecies.id)
-            .where(Planting.garden_id == garden.id)
-            .where(Planting.date_removed.is_(None))
-            .limit(10)
-        )
-        rows = result.all()
-        if rows:
-            parts.append("\n## Active Plantings")
-            for planting, species in rows:
-                indicator = " ← FOCUS" if planting_id and planting.id == planting_id else ""
-                parts.append(
-                    f"- {species.common_name}{indicator} "
-                    f"(planted: {planting.date_seeded or planting.date_transplanted or 'unknown'}, "
-                    f"status: {planting.status}, "
-                    f"bed: {planting.bed_or_location or 'unspecified'})"
+        # Collect context from all providers
+        providers = get_default_providers()
+        all_chunks: list[ContextChunk] = []
+        for provider in providers:
+            try:
+                chunks = await provider.get_context(
+                    garden_id=garden.id,
+                    db=db,
+                    planting_id=planting_id,
+                )
+                all_chunks.extend(chunks)
+            except Exception:
+                logger.warning(
+                    "Context provider %s failed",
+                    provider.provider_name,
+                    exc_info=True,
                 )
 
-        # If a specific planting is focused, include species details
-        if planting_id:
-            focused_planting = await db.get(Planting, planting_id)
-            if focused_planting:
-                species = await db.get(PlantSpecies, focused_planting.species_id)
-                if species:
-                    parts.append(f"\n## Focused Plant: {species.common_name}")
-                    if species.days_to_maturity_min:
-                        maturity = str(species.days_to_maturity_min)
-                        if species.days_to_maturity_max:
-                            maturity += f"–{species.days_to_maturity_max}"
-                        parts.append(f"- Days to maturity: {maturity}")
-                    if species.sun_requirement:
-                        parts.append(f"- Sun: {species.sun_requirement}")
-                    if species.water_requirement:
-                        parts.append(f"- Water: {species.water_requirement}")
-                    if species.frost_tolerance:
-                        parts.append(f"- Frost tolerance: {species.frost_tolerance}")
-
-                    # Include curated dossier sections if available —
-                    # limited to the most actionable sections to keep context compact.
-                    if species.curation_status == "curated":
-                        dossier_result = await db.execute(
-                            select(DossierSection)
-                            .where(DossierSection.species_id == species.id)
-                            .where(
-                                DossierSection.section_type.in_(
-                                    [
-                                        "overview",
-                                        "care_maintenance",
-                                        "pests_diseases",
-                                    ]
-                                )
-                            )
-                            .order_by(DossierSection.display_order)
-                        )
-                        sections = dossier_result.scalars().all()
-                        if sections:
-                            parts.append(f"\n### Curated Knowledge: {species.common_name}")
-                            for section in sections:
-                                parts.append(
-                                    f"\n**{section.title}** "
-                                    f"(confidence: {section.confidence}):\n"
-                                    + section.content[:600]
-                                )
-
-        # Recent weather (last 3 records)
-        weather_result = await db.execute(
-            select(WeatherRecord)
-            .where(WeatherRecord.garden_id == garden.id)
-            .where(WeatherRecord.record_type.in_(["current", "forecast"]))
-            .order_by(WeatherRecord.fetched_at.desc())
-            .limit(5)
-        )
-        weather_records = weather_result.scalars().all()
-        if weather_records:
-            parts.append("\n## Recent & Forecast Weather")
-            for rec in weather_records:
-                temp_str = (
-                    f"temp {rec.temp_c:.1f}°C" if rec.temp_c is not None else "no temp data"
-                )
-                frost_note = " ⚠ FROST RISK" if rec.frost_risk else ""
-                parts.append(
-                    f"- {rec.timestamp.date()} ({rec.record_type}): "
-                    f"{temp_str}{frost_note}"
-                )
+        # Sort by relevance (highest first) and assemble
+        all_chunks.sort(key=lambda c: c.relevance, reverse=True)
+        for chunk in all_chunks:
+            parts.append(chunk.content)
 
         parts.append(f"\n## Today's Date\n{datetime.now(UTC).date()}")
         return "\n".join(parts)
