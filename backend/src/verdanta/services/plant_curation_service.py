@@ -244,6 +244,26 @@ async def curate_plant(plant_id: int, db: AsyncSession) -> PlantSpecies:
     )
     db.add(interaction)
 
+    # Write knowledge entries for each dossier section
+    from verdanta.services.knowledge_service import write_knowledge_entry
+
+    for order, (section_type, title) in enumerate(DOSSIER_SECTIONS):
+        section_data = dossier_data.get(section_type, {})
+        content = section_data.get("content", "")
+        if content:
+            await write_knowledge_entry(
+                db=db,
+                source_type="dossier_section",
+                content=f"{title}: {content}",
+                garden_id=None,
+                source_id=plant_id,
+                metadata={
+                    "species_name": plant.common_name,
+                    "section_type": section_type,
+                },
+                chunk_index=order,
+            )
+
     await db.flush()
     await db.refresh(plant)
     return plant

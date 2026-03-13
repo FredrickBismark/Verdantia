@@ -6,6 +6,7 @@ from verdanta.core.database import get_db
 from verdanta.models.plant import PlantSpecies
 from verdanta.models.planting import HarvestLog, Planting
 from verdanta.schemas.harvest import HarvestLogCreate, HarvestLogResponse
+from verdanta.services.knowledge_service import write_knowledge_entry
 
 router = APIRouter()
 
@@ -20,6 +21,25 @@ async def log_harvest(
     db.add(harvest)
     await db.flush()
     await db.refresh(harvest)
+
+    # Resolve garden_id from planting for knowledge entry
+    planting = await db.get(Planting, planting_id)
+    garden_id = planting.garden_id if planting else None
+
+    await write_knowledge_entry(
+        db=db,
+        source_type="harvest_log",
+        content=(
+            f"Harvested {harvest.quantity} {harvest.unit} on {harvest.harvest_date}"
+            f" (quality: {harvest.quality_rating}/5)"
+            if harvest.quality_rating
+            else f"Harvested {harvest.quantity} {harvest.unit} on {harvest.harvest_date}"
+        ),
+        garden_id=garden_id,
+        source_id=harvest.id,
+        metadata={"planting_id": planting_id},
+    )
+
     return {"data": HarvestLogResponse.model_validate(harvest)}
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from verdanta.core.database import get_db
 from verdanta.models.journal import JournalEntry
 from verdanta.schemas.journal import JournalEntryCreate, JournalEntryResponse, JournalEntryUpdate
+from verdanta.services.knowledge_service import write_knowledge_entry
 
 router = APIRouter()
 
@@ -21,6 +22,21 @@ async def create_journal_entry(
     db.add(entry)
     await db.flush()
     await db.refresh(entry)
+
+    # Write knowledge entry as side effect
+    await write_knowledge_entry(
+        db=db,
+        source_type="journal_entry",
+        content=f"[{entry.entry_date}] ({entry.category}) {entry.content}",
+        garden_id=garden_id,
+        source_id=entry.id,
+        metadata={
+            "planting_id": entry.planting_id,
+            "category": entry.category,
+            "tags": entry.tags,
+        },
+    )
+
     return {"data": JournalEntryResponse.model_validate(entry)}
 
 

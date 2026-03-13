@@ -1,6 +1,7 @@
 from verdanta.models.base import Base
 from verdanta.models.garden import Garden
 from verdanta.models.journal import JournalEntry
+from verdanta.models.knowledge import KnowledgeEntry
 from verdanta.models.llm import LLMInteraction
 from verdanta.models.plant import DossierSection, PlantDataSource, PlantSpecies
 from verdanta.models.planting import CalendarEvent, HarvestLog, Photo, Planting
@@ -12,6 +13,7 @@ __all__ = [
     "Base",
     "Garden",
     "JournalEntry",
+    "KnowledgeEntry",
     "PlantSpecies",
     "PlantDataSource",
     "DossierSection",
