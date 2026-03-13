@@ -8,7 +8,10 @@ import {
   Settings,
   Fence,
   BookOpen,
+  Bell,
 } from 'lucide-react'
+import { useGardenStore } from '../stores/gardenStore'
+import { useAlertCount } from './AlertPanel'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home },
@@ -17,11 +20,15 @@ const navItems = [
   { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/weather', label: 'Weather', icon: CloudSun },
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/advisor', label: 'Advisor', icon: Bot },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export const AppShell = ({ children }: { children: React.ReactNode }): React.ReactElement => {
+  const { selectedGardenId } = useGardenStore()
+  const alertCount = useAlertCount(selectedGardenId)
+
   return (
     <div className="flex h-screen bg-gray-50">
       <nav className="flex flex-col w-56 bg-white border-r border-gray-200 shrink-0">
@@ -45,6 +52,11 @@ export const AppShell = ({ children }: { children: React.ReactNode }): React.Rea
               >
                 <Icon className="w-5 h-5" />
                 {label}
+                {label === 'Alerts' && alertCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {alertCount > 9 ? '9+' : alertCount}
+                  </span>
+                )}
               </NavLink>
             </li>
           ))}

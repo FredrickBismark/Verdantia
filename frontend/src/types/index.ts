@@ -207,10 +207,23 @@ export interface LLMInteraction {
 }
 
 export interface Alert {
-  priority: string;
-  category: string;
-  description: string;
-  timestamp: string;
+  id: number;
+  garden_id: number;
+  planting_id: number | null;
+  alert_type: string;
+  severity: string;
+  title: string;
+  description: string | null;
+  source: string;
+  trigger_date: string;
+  triggered_at: string;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+  dismissed: boolean;
+  dismissed_at: string | null;
+  metadata_json: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────

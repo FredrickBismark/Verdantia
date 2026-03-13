@@ -10,6 +10,7 @@ from verdanta.core.config import settings
 from verdanta.core.database import init_db
 from verdanta.routes import (
     advisor,
+    alerts,
     app_settings,
     calendar,
     gardens,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from verdanta.services.alert_service import check_all_gardens_alerts
     from verdanta.services.weather_service import close_http_client, sync_all_gardens
 
     await init_db()
@@ -41,9 +43,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         replace_existing=True,
         misfire_grace_time=300,  # allow up to 5-min delay before skipping
     )
+    scheduler.add_job(
+        check_all_gardens_alerts,
+        "interval",
+        minutes=30,
+        id="alert_check",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
     scheduler.start()
     logger.info(
-        "Weather sync scheduler started (interval: %dh)",
+        "Schedulers started — weather sync: %dh, alert check: 30m",
         settings.weather_sync_interval_hours,
     )
 
@@ -79,6 +89,7 @@ app.include_router(photos.router, prefix="/api/v1", tags=["photos"])
 app.include_router(harvest.router, prefix="/api/v1", tags=["harvest"])
 app.include_router(soil.router, prefix="/api/v1", tags=["soil"])
 app.include_router(journal.router, prefix="/api/v1", tags=["journal"])
+app.include_router(alerts.router, prefix="/api/v1", tags=["alerts"])
 app.include_router(advisor.router, prefix="/api/v1", tags=["advisor"])
 app.include_router(app_settings.router, prefix="/api/v1", tags=["settings"])
 
