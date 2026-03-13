@@ -36,6 +36,9 @@ class Planting(Base):
     harvest_logs: Mapped[list["HarvestLog"]] = relationship(
         back_populates="planting", cascade="all, delete-orphan"
     )
+    journal_entries: Mapped[list["JournalEntry"]] = relationship(  # noqa: F821
+        back_populates="planting", cascade="save-update, merge", passive_deletes=True
+    )
 
 
 class CalendarEvent(Base):

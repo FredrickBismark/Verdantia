@@ -7,6 +7,7 @@ import {
   Bot,
   Settings,
   Fence,
+  BookOpen,
 } from 'lucide-react'
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/gardens', label: 'Gardens', icon: Fence },
   { to: '/plants', label: 'Plants', icon: Sprout },
   { to: '/calendar', label: 'Calendar', icon: Calendar },
+  { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/weather', label: 'Weather', icon: CloudSun },
   { to: '/advisor', label: 'Advisor', icon: Bot },
   { to: '/settings', label: 'Settings', icon: Settings },
