@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2, Camera, BookOpen, Database } from 'lucide-react';
+import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2, Camera, BookOpen, Database, Apple } from 'lucide-react';
 import { usePlants, usePlant, useCreatePlant, useUpdatePlant, useDeletePlant, useCuratePlant } from '../hooks/usePlants';
 import { usePlantings } from '../hooks/usePlantings';
 import { useGardenStore } from '../stores/gardenStore';
 import { PhotoUpload } from '../components/PhotoUpload';
 import { PhotoGallery } from '../components/PhotoGallery';
+import { HarvestLogger } from '../components/HarvestLogger';
+import { HarvestChart } from '../components/HarvestChart';
 import type { PlantSpecies } from '../types';
 
 interface PlantFormData {
@@ -50,7 +52,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   contradicted: 'bg-red-100 text-red-700',
 };
 
-type DetailTab = 'overview' | 'photos' | 'sources';
+type DetailTab = 'overview' | 'photos' | 'harvest' | 'sources';
 
 const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void }): React.ReactElement => {
   const { data, isLoading } = usePlant(plantId);
@@ -107,6 +109,7 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
           {([
             { key: 'overview' as DetailTab, label: 'Overview', icon: BookOpen },
             { key: 'photos' as DetailTab, label: 'Photos', icon: Camera },
+            { key: 'harvest' as DetailTab, label: 'Harvest', icon: Apple },
             { key: 'sources' as DetailTab, label: 'Sources', icon: Database },
           ]).map(({ key, label, icon: Icon }) => (
             <button
@@ -183,6 +186,27 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
                   </h4>
                   <PhotoUpload plantingId={planting.id} />
                   <PhotoGallery plantingId={planting.id} />
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'harvest' && (
+          <div className="space-y-6">
+            {speciesPlantings.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-6">
+                No plantings found for this species. Create a planting to log harvests.
+              </p>
+            ) : (
+              speciesPlantings.map((planting) => (
+                <div key={planting.id} className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">
+                    {planting.bed_or_location ?? `Planting #${planting.id}`}
+                    <span className="text-gray-400 ml-2 text-xs">({planting.status})</span>
+                  </h4>
+                  <HarvestLogger plantingId={planting.id} />
+                  <HarvestChart plantingId={planting.id} />
                 </div>
               ))
             )}

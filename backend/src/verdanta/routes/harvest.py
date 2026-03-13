@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
-from verdanta.models.planting import HarvestLog
+from verdanta.models.plant import PlantSpecies
+from verdanta.models.planting import HarvestLog, Planting
 from verdanta.schemas.harvest import HarvestLogCreate, HarvestLogResponse
 
 router = APIRouter()
@@ -30,11 +31,40 @@ async def list_harvests(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     base_query = select(HarvestLog).where(HarvestLog.planting_id == planting_id)
-    result = await db.execute(base_query.offset(skip).limit(limit))
+    result = await db.execute(
+        base_query.order_by(HarvestLog.harvest_date.desc()).offset(skip).limit(limit)
+    )
     harvests = result.scalars().all()
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar_one()
     return {"data": [HarvestLogResponse.model_validate(h) for h in harvests], "count": total}
+
+
+@router.get("/plantings/{planting_id}/harvests/stats", response_model=dict)
+async def planting_harvest_stats(
+    planting_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(
+            func.sum(HarvestLog.quantity).label("total_quantity"),
+            func.avg(HarvestLog.quality_rating).label("avg_quality"),
+            func.count(HarvestLog.id).label("harvest_count"),
+            func.min(HarvestLog.harvest_date).label("first_harvest"),
+            func.max(HarvestLog.harvest_date).label("last_harvest"),
+        ).where(HarvestLog.planting_id == planting_id)
+    )
+    row = result.one()
+    return {
+        "data": {
+            "planting_id": planting_id,
+            "total_quantity": float(row.total_quantity) if row.total_quantity else 0,
+            "avg_quality": round(float(row.avg_quality), 1) if row.avg_quality else None,
+            "harvest_count": row.harvest_count,
+            "first_harvest": str(row.first_harvest) if row.first_harvest else None,
+            "last_harvest": str(row.last_harvest) if row.last_harvest else None,
+        }
+    }
 
 
 @router.get("/gardens/{garden_id}/harvests/summary", response_model=dict)
@@ -42,5 +72,70 @@ async def harvest_summary(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement aggregate harvest stats (Phase 5)
-    raise HTTPException(status_code=501, detail="Harvest summary not yet implemented")
+    # Overall totals grouped by unit
+    totals_result = await db.execute(
+        select(
+            HarvestLog.unit,
+            func.sum(HarvestLog.quantity).label("total_quantity"),
+            func.avg(HarvestLog.quality_rating).label("avg_quality"),
+            func.count(HarvestLog.id).label("harvest_count"),
+        )
+        .join(Planting, HarvestLog.planting_id == Planting.id)
+        .where(Planting.garden_id == garden_id)
+        .group_by(HarvestLog.unit)
+    )
+    by_unit = [
+        {
+            "unit": row.unit,
+            "total_quantity": float(row.total_quantity),
+            "avg_quality": round(float(row.avg_quality), 1) if row.avg_quality else None,
+            "harvest_count": row.harvest_count,
+        }
+        for row in totals_result.all()
+    ]
+
+    # Date range
+    range_result = await db.execute(
+        select(
+            func.min(HarvestLog.harvest_date).label("first_harvest"),
+            func.max(HarvestLog.harvest_date).label("last_harvest"),
+            func.count(HarvestLog.id).label("total_count"),
+        )
+        .join(Planting, HarvestLog.planting_id == Planting.id)
+        .where(Planting.garden_id == garden_id)
+    )
+    range_row = range_result.one()
+
+    # Grouped by species
+    species_result = await db.execute(
+        select(
+            PlantSpecies.common_name,
+            HarvestLog.unit,
+            func.sum(HarvestLog.quantity).label("total_quantity"),
+            func.count(HarvestLog.id).label("harvest_count"),
+        )
+        .join(Planting, HarvestLog.planting_id == Planting.id)
+        .join(PlantSpecies, Planting.species_id == PlantSpecies.id)
+        .where(Planting.garden_id == garden_id)
+        .group_by(PlantSpecies.common_name, HarvestLog.unit)
+    )
+    by_species = [
+        {
+            "species": row.common_name,
+            "unit": row.unit,
+            "total_quantity": float(row.total_quantity),
+            "harvest_count": row.harvest_count,
+        }
+        for row in species_result.all()
+    ]
+
+    return {
+        "data": {
+            "garden_id": garden_id,
+            "total_harvests": range_row.total_count,
+            "first_harvest": str(range_row.first_harvest) if range_row.first_harvest else None,
+            "last_harvest": str(range_row.last_harvest) if range_row.last_harvest else None,
+            "by_unit": by_unit,
+            "by_species": by_species,
+        }
+    }
