@@ -246,6 +246,60 @@ class CalendarService:
         await db.flush()
         return events
 
+    async def reschedule_weather_dependent(
+        self,
+        garden: Garden,
+        db: AsyncSession,
+    ) -> list[CalendarEvent]:
+        """Shift upcoming weather-dependent events that fall on forecast alert days.
+
+        When a frost or heavy-rain alert is forecast, any incomplete
+        weather_dependent event on that date is pushed forward one day at a
+        time until it lands on a clear day (capped at 7 iterations).
+        Returns the list of rescheduled events.
+        """
+        from sqlalchemy import select
+
+        alerts = await self._weather_svc.get_recent_weather_alerts(garden.id, db)
+        if not alerts:
+            return []
+
+        alert_dates: set[date] = {
+            d for a in alerts if (d := _parse_date(a["date"])) is not None
+        }
+        if not alert_dates:
+            return []
+
+        today = date.today()
+        max_alert_date = max(alert_dates)
+
+        result = await db.execute(
+            select(CalendarEvent).where(
+                CalendarEvent.garden_id == garden.id,
+                CalendarEvent.weather_dependent.is_(True),
+                CalendarEvent.completed.is_(False),
+                CalendarEvent.scheduled_date >= today,
+                CalendarEvent.scheduled_date <= max_alert_date,
+            )
+        )
+        events = result.scalars().all()
+
+        rescheduled: list[CalendarEvent] = []
+        for event in events:
+            if event.scheduled_date not in alert_dates:
+                continue
+            new_date = event.scheduled_date + timedelta(days=1)
+            steps = 0
+            while new_date in alert_dates and steps < 7:
+                new_date += timedelta(days=1)
+                steps += 1
+            event.scheduled_date = new_date
+            rescheduled.append(event)
+
+        if rescheduled:
+            await db.flush()
+        return rescheduled
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

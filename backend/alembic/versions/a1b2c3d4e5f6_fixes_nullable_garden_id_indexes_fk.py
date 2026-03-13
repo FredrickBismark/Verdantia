@@ -1,4 +1,4 @@
-"""fixes: nullable garden_id on llm_interactions, query indexes, restrict FK on plantings.species_id
+"""fixes: nullable garden_id on llm_interactions, query indexes
 
 Revision ID: a1b2c3d4e5f6
 Revises: 24c5b35436f6
@@ -8,8 +8,10 @@ Changes:
 - llm_interactions.garden_id: NOT NULL -> NULL  (curation interactions are not garden-scoped)
 - Add indexes for common query patterns on weather_records, calendar_events,
   sensor_readings, llm_interactions, and plantings
-- plantings.species_id FK: add ondelete RESTRICT to prevent silent cascade deletes
-  of plantings when a plant species is removed
+
+Note: plantings.species_id FK already restricts by default in SQLite when
+PRAGMA foreign_keys=ON (enabled in init_db). ORM-side cascade="save-update,merge"
+with passive_deletes=True further prevents accidental orphan deletion.
 """
 from typing import Sequence, Union
 
@@ -32,19 +34,7 @@ def upgrade() -> None:
             nullable=True,
         )
 
-    # ── 2. Add plantings.species_id FK with RESTRICT ──────────────────────────
-    # Recreate the plantings table via batch to update the FK constraint.
-    with op.batch_alter_table("plantings", schema=None) as batch_op:
-        batch_op.drop_constraint("fk_plantings_species_id", type_="foreignkey")
-        batch_op.create_foreign_key(
-            "fk_plantings_species_id",
-            "plant_species",
-            ["species_id"],
-            ["id"],
-            ondelete="RESTRICT",
-        )
-
-    # ── 3. Indexes ────────────────────────────────────────────────────────────
+    # ── 2. Indexes ─────────────────────────────────────────────────────────────
 
     # weather_records — primary query pattern: by garden + type, and by garden + time
     op.create_index(
@@ -110,15 +100,6 @@ def downgrade() -> None:
         "ix_weather_records_garden_timestamp", table_name="weather_records"
     )
     op.drop_index("ix_weather_records_garden_type", table_name="weather_records")
-
-    with op.batch_alter_table("plantings", schema=None) as batch_op:
-        batch_op.drop_constraint("fk_plantings_species_id", type_="foreignkey")
-        batch_op.create_foreign_key(
-            "fk_plantings_species_id",
-            "plant_species",
-            ["species_id"],
-            ["id"],
-        )
 
     with op.batch_alter_table("llm_interactions", schema=None) as batch_op:
         batch_op.alter_column(

@@ -147,12 +147,13 @@ async def generate_schedule(
     }
 
 
-@router.get("/gardens/{garden_id}/events/weather-alerts", response_model=dict)
+@router.post("/gardens/{garden_id}/events/weather-alerts", response_model=dict, status_code=201)
 async def weather_alerts(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Create calendar alert events for upcoming frost and extreme weather."""
+    """Create calendar alert events for upcoming frost/extreme weather and reschedule
+    any weather-dependent events that conflict with those alert days."""
     from verdanta.models.garden import Garden
     from verdanta.services.calendar_service import CalendarService
 
@@ -161,8 +162,11 @@ async def weather_alerts(
         raise HTTPException(status_code=404, detail="Garden not found")
 
     svc = CalendarService()
-    events = await svc.generate_weather_alerts(garden, db)
+    alerts = await svc.generate_weather_alerts(garden, db)
+    rescheduled = await svc.reschedule_weather_dependent(garden, db)
     return {
-        "data": [CalendarEventResponse.model_validate(e) for e in events],
-        "count": len(events),
+        "data": [CalendarEventResponse.model_validate(e) for e in alerts],
+        "count": len(alerts),
+        "rescheduled": [CalendarEventResponse.model_validate(e) for e in rescheduled],
+        "rescheduled_count": len(rescheduled),
     }

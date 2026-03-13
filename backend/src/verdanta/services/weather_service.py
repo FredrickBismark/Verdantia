@@ -405,3 +405,32 @@ def _get(daily: dict, key: str, index: int) -> float | None:
     if values is None or not isinstance(values, list) or index >= len(values):
         return None
     return values[index]
+
+
+async def sync_all_gardens() -> None:
+    """APScheduler background job: sync weather for every garden.
+
+    Called on a recurring interval (default: every 6 hours). Creates its own
+    DB session because it runs outside the normal request/response cycle.
+    """
+    from sqlalchemy import select
+
+    from verdanta.core.database import async_session_factory
+    from verdanta.models.garden import Garden
+
+    svc = WeatherService()
+    async with async_session_factory() as session:
+        result = await session.execute(select(Garden))
+        gardens = result.scalars().all()
+        synced = 0
+        for garden in gardens:
+            try:
+                await svc.sync_garden(garden, session)
+                synced += 1
+            except Exception as exc:
+                logger.warning(
+                    "Background weather sync failed for garden %d: %s", garden.id, exc
+                )
+        if synced:
+            await session.commit()
+    logger.info("Background weather sync complete: %d garden(s) updated", synced)

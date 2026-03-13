@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.models.garden import Garden
 from verdanta.models.llm import LLMInteraction
-from verdanta.models.plant import PlantSpecies
+from verdanta.models.plant import DossierSection, PlantSpecies
 from verdanta.models.planting import Planting
 from verdanta.models.settings import AppSettings
 from verdanta.models.weather import WeatherRecord
@@ -141,6 +141,33 @@ class AdvisorService:
                         parts.append(f"- Water: {species.water_requirement}")
                     if species.frost_tolerance:
                         parts.append(f"- Frost tolerance: {species.frost_tolerance}")
+
+                    # Include curated dossier sections if available —
+                    # limited to the most actionable sections to keep context compact.
+                    if species.curation_status == "curated":
+                        dossier_result = await db.execute(
+                            select(DossierSection)
+                            .where(DossierSection.species_id == species.id)
+                            .where(
+                                DossierSection.section_type.in_(
+                                    [
+                                        "overview",
+                                        "care_maintenance",
+                                        "pests_diseases",
+                                    ]
+                                )
+                            )
+                            .order_by(DossierSection.display_order)
+                        )
+                        sections = dossier_result.scalars().all()
+                        if sections:
+                            parts.append(f"\n### Curated Knowledge: {species.common_name}")
+                            for section in sections:
+                                parts.append(
+                                    f"\n**{section.title}** "
+                                    f"(confidence: {section.confidence}):\n"
+                                    + section.content[:600]
+                                )
 
         # Recent weather (last 3 records)
         weather_result = await db.execute(
