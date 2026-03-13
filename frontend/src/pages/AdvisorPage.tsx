@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import { Send, ThumbsUp, ThumbsDown, Bot, User, Leaf } from 'lucide-react';
@@ -12,6 +12,7 @@ interface Message {
   interactionId?: number;
   modelUsed?: string;
   provider?: string;
+  isStreaming?: boolean;
 }
 
 export const AdvisorPage = (): React.ReactElement => {
@@ -21,7 +22,9 @@ export const AdvisorPage = (): React.ReactElement => {
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [showHistory, setShowHistory] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const { data: historyData } = useQuery({
     queryKey: ['advisor', 'history', selectedGardenId],
@@ -29,6 +32,7 @@ export const AdvisorPage = (): React.ReactElement => {
     enabled: selectedGardenId !== null && showHistory,
   });
 
+  // Fallback non-streaming chat
   const chatMutation = useMutation({
     mutationFn: (message: string) =>
       advisorApi.chat(selectedGardenId!, message),
@@ -65,12 +69,82 @@ export const AdvisorPage = (): React.ReactElement => {
     },
   });
 
+  const handleStreamingChat = useCallback(async (userMessage: string): Promise<void> => {
+    if (!selectedGardenId) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsStreaming(true);
+
+    // Add placeholder assistant message for streaming
+    setMessages((prev) => [
+      ...prev,
+      { role: 'assistant', content: '', isStreaming: true },
+    ]);
+
+    try {
+      let interactionId: number | undefined;
+
+      for await (const chunk of advisorApi.chatStream(
+        selectedGardenId,
+        userMessage,
+        null,
+        controller.signal,
+      )) {
+        if (chunk.done) {
+          interactionId = chunk.interaction_id ?? undefined;
+        } else {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last.isStreaming) {
+              updated[updated.length - 1] = {
+                ...last,
+                content: last.content + chunk.chunk,
+              };
+            }
+            return updated;
+          });
+        }
+      }
+
+      // Finalize the streaming message
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last.isStreaming) {
+          updated[updated.length - 1] = {
+            ...last,
+            isStreaming: false,
+            interactionId,
+          };
+        }
+        return updated;
+      });
+
+      void queryClient.invalidateQueries({ queryKey: ['advisor', 'history'] });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+
+      // Remove the streaming placeholder
+      setMessages((prev) => prev.filter((m) => !m.isStreaming));
+
+      // Fall back to non-streaming
+      chatMutation.mutate(userMessage);
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
+  }, [selectedGardenId, chatMutation, queryClient]);
+
+  const isBusy = isStreaming || chatMutation.isPending;
+
   const handleSend = (): void => {
-    if (!input.trim() || chatMutation.isPending) return;
+    if (!input.trim() || isBusy) return;
     const userMsg = input.trim();
     setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
     setInput('');
-    chatMutation.mutate(userMsg);
+    void handleStreamingChat(userMsg);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
@@ -82,7 +156,7 @@ export const AdvisorPage = (): React.ReactElement => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, chatMutation.isPending]);
+  }, [messages, isBusy]);
 
   if (!selectedGardenId) {
     return (
@@ -161,12 +235,18 @@ export const AdvisorPage = (): React.ReactElement => {
                     {msg.role === 'assistant' ? (
                       <div className="prose prose-sm max-w-none">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        {msg.isStreaming && msg.content === '' && (
+                          <TypingIndicator />
+                        )}
+                        {msg.isStreaming && msg.content !== '' && (
+                          <span className="inline-block w-1.5 h-4 bg-green-500 animate-pulse ml-0.5 align-text-bottom" />
+                        )}
                       </div>
                     ) : (
                       msg.content
                     )}
                   </div>
-                  {msg.role === 'assistant' && msg.interactionId !== undefined && (
+                  {msg.role === 'assistant' && !msg.isStreaming && msg.interactionId !== undefined && (
                     <div className="flex items-center gap-2 text-xs text-gray-400">
                       {msg.modelUsed && (
                         <span>{msg.modelUsed} ({msg.provider})</span>
@@ -201,11 +281,7 @@ export const AdvisorPage = (): React.ReactElement => {
                   <Bot size={14} className="text-gray-500" />
                 </div>
                 <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
+                  <TypingIndicator />
                 </div>
               </div>
             )}
@@ -225,7 +301,7 @@ export const AdvisorPage = (): React.ReactElement => {
               />
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || chatMutation.isPending}
+                disabled={!input.trim() || isBusy}
                 className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 self-end"
               >
                 <Send size={16} />
@@ -268,6 +344,14 @@ export const AdvisorPage = (): React.ReactElement => {
     </div>
   );
 };
+
+const TypingIndicator = (): React.ReactElement => (
+  <div className="flex gap-1">
+    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+    <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+  </div>
+);
 
 const SUGGESTIONS = [
   'What should I be doing in my garden this week?',
