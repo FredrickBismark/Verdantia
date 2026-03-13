@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2, Camera, BookOpen, Database, Apple } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
+import { Plus, Search, ArrowLeft, Pencil, Trash2, Sprout, Sparkles, Loader2, Camera, BookOpen, Database, Apple, FlaskConical, StickyNote } from 'lucide-react';
 import { usePlants, usePlant, useCreatePlant, useUpdatePlant, useDeletePlant, useCuratePlant } from '../hooks/usePlants';
 import { usePlantings } from '../hooks/usePlantings';
 import { useGardenStore } from '../stores/gardenStore';
@@ -8,7 +10,9 @@ import { PhotoUpload } from '../components/PhotoUpload';
 import { PhotoGallery } from '../components/PhotoGallery';
 import { HarvestLogger } from '../components/HarvestLogger';
 import { HarvestChart } from '../components/HarvestChart';
-import type { PlantSpecies } from '../types';
+import { soilApi } from '../api/soil';
+import { journalApi } from '../api/journal';
+import type { PlantSpecies, SoilTest } from '../types';
 
 interface PlantFormData {
   common_name: string;
@@ -52,7 +56,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   contradicted: 'bg-red-100 text-red-700',
 };
 
-type DetailTab = 'overview' | 'photos' | 'harvest' | 'sources';
+type DetailTab = 'overview' | 'photos' | 'harvest' | 'soil' | 'notes' | 'sources';
 
 const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void }): React.ReactElement => {
   const { data, isLoading } = usePlant(plantId);
@@ -110,6 +114,8 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
             { key: 'overview' as DetailTab, label: 'Overview', icon: BookOpen },
             { key: 'photos' as DetailTab, label: 'Photos', icon: Camera },
             { key: 'harvest' as DetailTab, label: 'Harvest', icon: Apple },
+            { key: 'soil' as DetailTab, label: 'Soil', icon: FlaskConical },
+            { key: 'notes' as DetailTab, label: 'Notes', icon: StickyNote },
             { key: 'sources' as DetailTab, label: 'Sources', icon: Database },
           ]).map(({ key, label, icon: Icon }) => (
             <button
@@ -213,34 +219,30 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
           </div>
         )}
 
+        {activeTab === 'soil' && selectedGardenId && (
+          <SoilTabContent gardenId={selectedGardenId} />
+        )}
+
+        {activeTab === 'notes' && selectedGardenId && (
+          <NotesTabContent
+            gardenId={selectedGardenId}
+            plantingIds={speciesPlantings.map((p) => p.id)}
+            speciesName={plant.common_name}
+          />
+        )}
+
         {activeTab === 'sources' && (
           <div>
             {plant.data_sources.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {plant.data_sources.map((source) => (
-                  <div key={source.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-2">
-                    <div>
-                      <span className="font-medium text-gray-900">{source.source_name}</span>
-                      <span className="text-gray-400 ml-2 text-xs">{source.source_type}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {source.confidence_score !== null && (
-                        <span className="text-xs text-gray-500">
-                          {Math.round(source.confidence_score * 100)}% confidence
-                        </span>
-                      )}
-                      {source.source_url && (
-                        <a href={source.source_url} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:underline">
-                          View source
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                  <SourceCard key={source.id} source={source} />
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-400 text-center py-6">No data sources yet.</p>
+              <p className="text-sm text-gray-400 text-center py-6">
+                No data sources yet. Curate this plant to fetch external data.
+              </p>
             )}
           </div>
         )}
@@ -255,6 +257,291 @@ const Field = ({ label, value }: { label: string; value: string }): React.ReactE
     <dd className="text-gray-900 mt-0.5">{value}</dd>
   </div>
 );
+
+const TEXTURES = ['Sandy', 'Loamy', 'Clay', 'Silty', 'Chalky', 'Peaty'];
+
+const SoilTabContent = ({ gardenId }: { gardenId: number }): React.ReactElement => {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    test_date: new Date().toISOString().split('T')[0],
+    location: '',
+    ph: '',
+    nitrogen_ppm: '',
+    phosphorus_ppm: '',
+    potassium_ppm: '',
+    organic_matter_pct: '',
+    texture: '',
+    notes: '',
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['soil-tests', gardenId],
+    queryFn: () => soilApi.list(gardenId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      soilApi.create(gardenId, {
+        test_date: form.test_date,
+        location: form.location || null,
+        ph: form.ph ? parseFloat(form.ph) : null,
+        nitrogen_ppm: form.nitrogen_ppm ? parseFloat(form.nitrogen_ppm) : null,
+        phosphorus_ppm: form.phosphorus_ppm ? parseFloat(form.phosphorus_ppm) : null,
+        potassium_ppm: form.potassium_ppm ? parseFloat(form.potassium_ppm) : null,
+        organic_matter_pct: form.organic_matter_pct ? parseFloat(form.organic_matter_pct) : null,
+        texture: form.texture || null,
+        notes: form.notes || null,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['soil-tests', gardenId] });
+      setShowForm(false);
+      setForm({
+        test_date: new Date().toISOString().split('T')[0],
+        location: '', ph: '', nitrogen_ppm: '', phosphorus_ppm: '',
+        potassium_ppm: '', organic_matter_pct: '', texture: '', notes: '',
+      });
+    },
+  });
+
+  const tests: SoilTest[] = data?.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-gray-600">{tests.length} soil test{tests.length !== 1 ? 's' : ''} recorded</span>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-1 text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          <Plus size={12} /> Add Test
+        </button>
+      </div>
+
+      {showForm && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}
+          className="bg-gray-50 rounded-lg p-4 space-y-3"
+        >
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Test Date</label>
+              <input type="date" value={form.test_date} onChange={(e) => setForm({ ...form, test_date: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Location</label>
+              <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="e.g. Bed A" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">pH</label>
+              <input type="number" step="0.1" min="0" max="14" value={form.ph} onChange={(e) => setForm({ ...form, ph: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nitrogen (ppm)</label>
+              <input type="number" step="0.1" value={form.nitrogen_ppm} onChange={(e) => setForm({ ...form, nitrogen_ppm: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Phosphorus (ppm)</label>
+              <input type="number" step="0.1" value={form.phosphorus_ppm} onChange={(e) => setForm({ ...form, phosphorus_ppm: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Potassium (ppm)</label>
+              <input type="number" step="0.1" value={form.potassium_ppm} onChange={(e) => setForm({ ...form, potassium_ppm: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Organic Matter (%)</label>
+              <input type="number" step="0.1" value={form.organic_matter_pct} onChange={(e) => setForm({ ...form, organic_matter_pct: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Texture</label>
+              <select value={form.texture} onChange={(e) => setForm({ ...form, texture: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                <option value="">Select...</option>
+                {TEXTURES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={createMutation.isPending}
+              className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+              {createMutation.isPending ? 'Saving...' : 'Save Test'}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)}
+              className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {isLoading ? (
+        <div className="text-sm text-gray-400">Loading soil tests...</div>
+      ) : tests.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-6">No soil tests recorded yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {tests.map((test) => (
+            <SoilTestCard key={test.id} test={test} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SoilTestCard = ({ test }: { test: SoilTest }): React.ReactElement => {
+  const phColor = test.ph !== null
+    ? test.ph < 5.5 ? 'text-red-600' : test.ph > 7.5 ? 'text-blue-600' : 'text-green-600'
+    : '';
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-3 text-sm">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium text-gray-900">
+          {new Date(test.test_date).toLocaleDateString()}
+          {test.location && <span className="text-gray-500 ml-2">— {test.location}</span>}
+        </span>
+        {test.texture && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">{test.texture}</span>}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+        {test.ph !== null && (
+          <div><span className="text-gray-500">pH</span> <span className={`font-medium ${phColor}`}>{test.ph}</span></div>
+        )}
+        {test.nitrogen_ppm !== null && (
+          <div><span className="text-gray-500">N</span> <span className="font-medium">{test.nitrogen_ppm} ppm</span></div>
+        )}
+        {test.phosphorus_ppm !== null && (
+          <div><span className="text-gray-500">P</span> <span className="font-medium">{test.phosphorus_ppm} ppm</span></div>
+        )}
+        {test.potassium_ppm !== null && (
+          <div><span className="text-gray-500">K</span> <span className="font-medium">{test.potassium_ppm} ppm</span></div>
+        )}
+        {test.organic_matter_pct !== null && (
+          <div><span className="text-gray-500">OM</span> <span className="font-medium">{test.organic_matter_pct}%</span></div>
+        )}
+      </div>
+      {test.notes && <p className="text-xs text-gray-500 mt-2">{test.notes}</p>}
+    </div>
+  );
+};
+
+interface NotesTabProps {
+  gardenId: number;
+  plantingIds: number[];
+  speciesName: string;
+}
+
+const NotesTabContent = ({ gardenId, plantingIds, speciesName }: NotesTabProps): React.ReactElement => {
+  const { data, isLoading } = useQuery({
+    queryKey: ['journal', 'species-notes', gardenId, plantingIds],
+    queryFn: () => journalApi.list(gardenId, { limit: 50 }),
+    enabled: gardenId > 0,
+  });
+
+  // Filter journal entries that are related to this species' plantings
+  const entries = (data?.data ?? []).filter(
+    (e) => e.planting_id !== null && plantingIds.includes(e.planting_id)
+  );
+
+  if (isLoading) return <div className="text-sm text-gray-400">Loading notes...</div>;
+
+  if (entries.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        <StickyNote size={32} className="mx-auto mb-2 text-gray-300" />
+        <p className="text-sm">No journal entries linked to {speciesName} plantings.</p>
+        <p className="text-xs mt-1">Create observations from the Journal page to see them here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map((entry) => (
+        <div key={entry.id} className="border-l-2 border-green-300 pl-4 py-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-gray-900">
+              {new Date(entry.entry_date).toLocaleDateString()}
+            </span>
+            <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded capitalize">
+              {entry.category.replace('_', ' ')}
+            </span>
+            {entry.mood && (
+              <span className="text-xs text-gray-400">{entry.mood}</span>
+            )}
+          </div>
+          <div className="prose prose-sm max-w-none text-gray-700">
+            <ReactMarkdown>{entry.content}</ReactMarkdown>
+          </div>
+          {entry.tags && entry.tags.length > 0 && (
+            <div className="flex gap-1 mt-1">
+              {entry.tags.map((tag: string) => (
+                <span key={tag} className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const SourceCard = ({ source }: { source: import('../types').PlantDataSource }): React.ReactElement => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="font-medium text-gray-900">{source.source_name}</span>
+          <span className="text-gray-400 ml-2 text-xs">{source.source_type}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {source.confidence_score !== null && (
+            <span className="text-xs text-gray-500">
+              {Math.round(source.confidence_score * 100)}% confidence
+            </span>
+          )}
+          {source.source_url && (
+            <a href={source.source_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline">
+              View source
+            </a>
+          )}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-gray-500 hover:text-gray-700 underline"
+          >
+            {expanded ? 'Hide raw data' : 'Show raw data'}
+          </button>
+        </div>
+      </div>
+      {source.notes && <p className="text-xs text-gray-500 mt-1">{source.notes}</p>}
+      <p className="text-xs text-gray-400 mt-1">
+        Ingested: {new Date(source.ingested_at).toLocaleDateString()}
+      </p>
+      {expanded && (
+        <pre className="mt-2 p-3 bg-gray-900 text-green-400 text-xs rounded overflow-x-auto max-h-80">
+          {JSON.stringify(source.raw_data, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+};
 
 export const PlantsPage = (): React.ReactElement => {
   const { id } = useParams();
