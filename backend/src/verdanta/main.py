@@ -23,8 +23,11 @@ from verdanta.routes import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from verdanta.services.weather_service import close_http_client
+
     await init_db()
     yield
+    await close_http_client()
 
 
 app = FastAPI(

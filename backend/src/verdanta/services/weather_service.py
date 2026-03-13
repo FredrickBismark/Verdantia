@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 _FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 _ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
+# Shared HTTP client — reused across all weather requests to benefit from
+# connection keep-alive. Closed during app shutdown via close_http_client().
+_http_client = httpx.AsyncClient(
+    timeout=30.0,
+    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+)
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client. Call during application shutdown."""
+    await _http_client.aclose()
+
 _CURRENT_VARS = [
     "temperature_2m",
     "relative_humidity_2m",
@@ -60,10 +72,9 @@ class WeatherService:
             "timezone": garden.timezone or "UTC",
             "forecast_days": forecast_days,
         }
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(_FORECAST_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await _http_client.get(_FORECAST_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
         records: list[dict] = []
 
@@ -132,10 +143,9 @@ class WeatherService:
             "daily": ",".join(_ARCHIVE_DAILY_VARS),
             "timezone": garden.timezone or "UTC",
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(_ARCHIVE_URL, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await _http_client.get(_ARCHIVE_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
         records: list[dict] = []
         if "daily" in data:
@@ -186,7 +196,19 @@ class WeatherService:
         db: AsyncSession,
         forecast_days: int = 7,
     ) -> dict:
-        """Full sync: fetch current + forecast, store results."""
+        """Full sync: prune stale records, fetch current + forecast, store results.
+
+        Deletes existing current and forecast records for this garden before
+        inserting fresh ones to prevent unbounded table growth.
+        """
+        from sqlalchemy import delete as sa_delete
+
+        await db.execute(
+            sa_delete(WeatherRecord).where(
+                WeatherRecord.garden_id == garden.id,
+                WeatherRecord.record_type.in_(["current", "forecast"]),
+            )
+        )
         records = await self.fetch_current_and_forecast(garden, forecast_days)
         stored = await self.store_records(garden.id, records, db)
         return {

@@ -108,7 +108,7 @@ class AdvisorService:
             select(Planting, PlantSpecies)
             .join(PlantSpecies, Planting.species_id == PlantSpecies.id)
             .where(Planting.garden_id == garden.id)
-            .where(Planting.status.in_(["planned", "growing", "active"]))
+            .where(Planting.date_removed.is_(None))
             .limit(10)
         )
         rows = result.all()
