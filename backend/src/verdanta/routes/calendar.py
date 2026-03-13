@@ -123,8 +123,28 @@ async def generate_schedule(
     planting_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement auto-schedule generation (Phase 3)
-    raise HTTPException(status_code=501, detail="Schedule generation not yet implemented")
+    """Auto-generate a care schedule for a planting based on species data and frost dates."""
+    from verdanta.models.garden import Garden
+    from verdanta.models.planting import Planting
+    from verdanta.services.calendar_service import CalendarService
+
+    garden = await db.get(Garden, garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+    planting = await db.get(Planting, planting_id)
+    if not planting or planting.garden_id != garden_id:
+        raise HTTPException(status_code=404, detail="Planting not found in this garden")
+    from verdanta.models.plant import PlantSpecies
+    species = await db.get(PlantSpecies, planting.species_id)
+    if not species:
+        raise HTTPException(status_code=404, detail="Plant species not found")
+
+    svc = CalendarService()
+    events = await svc.generate_schedule(planting, species, garden, db)
+    return {
+        "data": [CalendarEventResponse.model_validate(e) for e in events],
+        "count": len(events),
+    }
 
 
 @router.get("/gardens/{garden_id}/events/weather-alerts", response_model=dict)
@@ -132,5 +152,17 @@ async def weather_alerts(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement weather-responsive alerts (Phase 3)
-    raise HTTPException(status_code=501, detail="Weather alerts not yet implemented")
+    """Create calendar alert events for upcoming frost and extreme weather."""
+    from verdanta.models.garden import Garden
+    from verdanta.services.calendar_service import CalendarService
+
+    garden = await db.get(Garden, garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+
+    svc = CalendarService()
+    events = await svc.generate_weather_alerts(garden, db)
+    return {
+        "data": [CalendarEventResponse.model_validate(e) for e in events],
+        "count": len(events),
+    }
