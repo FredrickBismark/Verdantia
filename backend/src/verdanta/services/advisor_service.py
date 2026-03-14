@@ -5,16 +5,19 @@ dossiers via the ContextProvider protocol. Logs every interaction and writes
 knowledge entries.
 """
 
+import base64
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.models.garden import Garden
 from verdanta.models.llm import LLMInteraction
+from verdanta.models.planting import Photo, Planting
 from verdanta.models.settings import AppSettings
-from verdanta.schemas.advisor import ChatResponse
+from verdanta.schemas.advisor import ChatResponse, DiagnosisResponse
 from verdanta.services.context_providers import ContextChunk, get_default_providers
 from verdanta.services.knowledge_service import write_knowledge_entry
 from verdanta.services.llm_service import create_llm_client, get_llm_config_from_settings
@@ -33,6 +36,21 @@ Guidelines:
 - If you are uncertain, say so rather than guessing.
 - Suggest when to seek additional data (soil tests, pest identification, etc.).
 - Keep responses conversational but informative.
+"""
+
+
+DIAGNOSIS_SYSTEM_PROMPT = """\
+You are an expert plant pathologist and horticulturist. Analyze the provided \
+photo and identify any visible issues such as diseases, pests, nutrient \
+deficiencies, environmental stress, or other problems.
+
+Guidelines:
+- Describe what you observe in the photo.
+- Identify the most likely issue(s) with reasoning.
+- Provide specific, actionable remedies.
+- If the plant appears healthy, say so.
+- If you cannot determine the issue with confidence, state that clearly.
+- Reference the specific plant species and growing conditions if context is provided.
 """
 
 
@@ -99,6 +117,76 @@ class AdvisorService:
             provider=llm_response.provider,
             context_summary=_summarize_context(garden, context),
             interaction_id=interaction.id,
+        )
+
+    async def diagnose(
+        self,
+        planting: Planting,
+        photo: Photo,
+        garden: Garden,
+        db: AsyncSession,
+        question: str | None = None,
+    ) -> DiagnosisResponse:
+        """Analyze a photo using the LLM vision capabilities."""
+        # Read and encode the photo
+        photo_path = Path(photo.file_path)
+        if not photo_path.exists():
+            raise FileNotFoundError(f"Photo file not found: {photo.file_path}")
+        image_data = base64.b64encode(photo_path.read_bytes()).decode("utf-8")
+
+        # Assemble context about this planting
+        context = await self._assemble_context(garden, db, planting.id)
+        full_system = f"{DIAGNOSIS_SYSTEM_PROMPT}\n\n{context}"
+
+        prompt = question or (
+            "Please analyze this plant photo and identify any issues, diseases, or pests."
+        )
+
+        db_settings = await _load_settings(db)
+        config = await get_llm_config_from_settings(db_settings)
+        client = create_llm_client(config)
+
+        llm_response = await client.generate(
+            prompt=prompt,
+            system=full_system,
+            images=[image_data],
+        )
+
+        interaction = LLMInteraction(
+            garden_id=garden.id,
+            planting_id=planting.id,
+            interaction_type="photo_diagnosis",
+            user_prompt=prompt,
+            system_context=context,
+            response=llm_response.text,
+            model_used=llm_response.model,
+            provider=llm_response.provider,
+            status="completed",
+            duration_ms=llm_response.duration_ms,
+            tokens_used=llm_response.tokens_used,
+            timestamp=datetime.now(UTC),
+        )
+        db.add(interaction)
+        await db.flush()
+        await db.refresh(interaction)
+
+        try:
+            await write_knowledge_entry(
+                db=db,
+                source_type="photo_diagnosis",
+                content=f"Photo diagnosis for planting {planting.id}: {llm_response.text}",
+                garden_id=garden.id,
+                source_id=interaction.id,
+                metadata={"planting_id": planting.id, "photo_id": photo.id},
+            )
+        except Exception:
+            logger.warning("Failed to write knowledge entry for diagnosis", exc_info=True)
+
+        return DiagnosisResponse(
+            diagnosis=llm_response.text,
+            interaction_id=interaction.id,
+            model_used=llm_response.model,
+            provider=llm_response.provider,
         )
 
     async def _assemble_context(

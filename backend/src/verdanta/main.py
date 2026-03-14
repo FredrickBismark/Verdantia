@@ -29,7 +29,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    import asyncio
+
     from verdanta.services.alert_service import check_all_gardens_alerts
+    from verdanta.services.sensor_service import start_mqtt_listener
     from verdanta.services.weather_service import close_http_client, sync_all_gardens
 
     await init_db()
@@ -57,8 +60,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.weather_sync_interval_hours,
     )
 
+    # Start MQTT sensor listener as a background task
+    mqtt_task = None
+    if settings.mqtt_enabled:
+        mqtt_task = asyncio.create_task(start_mqtt_listener())
+        logger.info("MQTT sensor listener task started")
+
     yield
 
+    if mqtt_task and not mqtt_task.done():
+        mqtt_task.cancel()
     scheduler.shutdown(wait=False)
     await close_http_client()
 

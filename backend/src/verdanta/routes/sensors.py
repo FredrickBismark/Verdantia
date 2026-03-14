@@ -5,8 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from verdanta.core.database import get_db
+from verdanta.models.garden import Garden
 from verdanta.models.weather import SensorReading
 from verdanta.schemas.weather import SensorReadingCreate, SensorReadingResponse
+from verdanta.services.sensor_service import (
+    discover_sensors_from_db,
+    get_sensor_status,
+    register_sensor,
+)
 
 router = APIRouter()
 
@@ -16,8 +22,13 @@ async def list_sensors(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement sensor management (Phase 4)
-    raise HTTPException(status_code=501, detail="Sensor management not yet implemented")
+    """List all known sensors for a garden, discovered from readings and MQTT."""
+    garden = await db.get(Garden, garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+
+    sensors = await discover_sensors_from_db(garden_id, db)
+    return {"data": sensors, "count": len(sensors)}
 
 
 @router.get("/gardens/{garden_id}/sensors/{sensor_id}/readings", response_model=dict)
@@ -49,6 +60,10 @@ async def manual_sensor_entry(
     reading_in: SensorReadingCreate,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    garden = await db.get(Garden, garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+
     reading = SensorReading(
         garden_id=garden_id,
         timestamp=reading_in.timestamp or datetime.now(UTC),
@@ -57,6 +72,15 @@ async def manual_sensor_entry(
     db.add(reading)
     await db.flush()
     await db.refresh(reading)
+
+    register_sensor(
+        garden_id=garden_id,
+        sensor_id=reading_in.sensor_id,
+        sensor_type=reading_in.sensor_type,
+        location=reading_in.location,
+        source="manual",
+    )
+
     return {"data": SensorReadingResponse.model_validate(reading)}
 
 
@@ -65,5 +89,10 @@ async def sensor_status(
     garden_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement sensor status tracking (Phase 4)
-    raise HTTPException(status_code=501, detail="Sensor status tracking not yet implemented")
+    """Get health and status information for all sensors in a garden."""
+    garden = await db.get(Garden, garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+
+    statuses = await get_sensor_status(garden_id, db)
+    return {"data": statuses, "count": len(statuses)}

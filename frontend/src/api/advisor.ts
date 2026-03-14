@@ -15,7 +15,20 @@ export interface StreamChunk {
   interaction_id?: number | null;
 }
 
+export interface DiagnosisResponse {
+  diagnosis: string;
+  interaction_id: number;
+  model_used: string;
+  provider: string;
+}
+
 export const advisorApi = {
+  diagnose: (plantingId: number, photoId: number, question?: string | null) =>
+    api.post<ApiResponse<DiagnosisResponse>>(`/plantings/${plantingId}/advisor/diagnose`, {
+      photo_id: photoId,
+      question: question ?? null,
+    }),
+
   chat: (gardenId: number, message: string, plantingId?: number | null) =>
     api.post<ApiResponse<ChatResponse>>(`/gardens/${gardenId}/advisor/chat`, {
       message,

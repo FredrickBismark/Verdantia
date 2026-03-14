@@ -13,6 +13,7 @@ from verdanta.models.llm import LLMInteraction
 from verdanta.schemas.advisor import (
     ChatRequest,
     ChatResponse,
+    DiagnosisRequest,
     FeedbackRequest,
     InteractionResponse,
 )
@@ -153,10 +154,42 @@ async def chat_stream(
 @router.post("/plantings/{planting_id}/advisor/diagnose", response_model=dict)
 async def diagnose_photo(
     planting_id: int,
+    diagnosis_in: DiagnosisRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # TODO: Implement photo diagnosis (Phase 4)
-    raise HTTPException(status_code=501, detail="Photo diagnosis not yet implemented")
+    """Analyze a photo of a plant using the LLM vision model."""
+    from verdanta.models.planting import Photo, Planting
+    from verdanta.services.advisor_service import AdvisorService
+
+    planting = await db.get(Planting, planting_id)
+    if not planting:
+        raise HTTPException(status_code=404, detail="Planting not found")
+
+    photo = await db.get(Photo, diagnosis_in.photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    garden = await db.get(Garden, planting.garden_id)
+    if not garden:
+        raise HTTPException(status_code=404, detail="Garden not found")
+
+    svc = AdvisorService()
+    try:
+        response = await svc.diagnose(
+            planting=planting,
+            photo=photo,
+            garden=garden,
+            db=db,
+            question=diagnosis_in.question,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Diagnosis unavailable: {exc}"
+        ) from exc
+
+    return {"data": response}
 
 
 @router.get("/gardens/{garden_id}/advisor/history", response_model=dict)

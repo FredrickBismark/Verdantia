@@ -40,5 +40,17 @@ class InteractionResponse(BaseModel):
     tokens_used: int | None
 
 
+class DiagnosisRequest(BaseModel):
+    photo_id: int
+    question: str | None = None
+
+
+class DiagnosisResponse(BaseModel):
+    diagnosis: str
+    interaction_id: int
+    model_used: str
+    provider: str
+
+
 class FeedbackRequest(BaseModel):
     feedback: str  # helpful, not_helpful, incorrect

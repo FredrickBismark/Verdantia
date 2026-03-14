@@ -10,6 +10,7 @@ import { PhotoUpload } from '../components/PhotoUpload';
 import { PhotoGallery } from '../components/PhotoGallery';
 import { HarvestLogger } from '../components/HarvestLogger';
 import { HarvestChart } from '../components/HarvestChart';
+import { PhotoDiagnosis } from '../components/PhotoDiagnosis';
 import { soilApi } from '../api/soil';
 import { journalApi } from '../api/journal';
 import type { PlantSpecies, SoilTest } from '../types';
@@ -192,6 +193,7 @@ const PlantDetail = ({ plantId, onBack }: { plantId: number; onBack: () => void 
                   </h4>
                   <PhotoUpload plantingId={planting.id} />
                   <PhotoGallery plantingId={planting.id} />
+                  <PhotoDiagnosis plantingId={planting.id} />
                 </div>
               ))
             )}

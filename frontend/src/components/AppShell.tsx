@@ -9,6 +9,7 @@ import {
   Fence,
   BookOpen,
   Bell,
+  Radio,
 } from 'lucide-react'
 import { useGardenStore } from '../stores/gardenStore'
 import { useAlertCount } from './AlertPanel'
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/weather', label: 'Weather', icon: CloudSun },
+  { to: '/sensors', label: 'Sensors', icon: Radio },
   { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/advisor', label: 'Advisor', icon: Bot },
   { to: '/settings', label: 'Settings', icon: Settings },

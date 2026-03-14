@@ -42,7 +42,7 @@ frontend/                # React + TypeScript frontend
 cd backend
 uv sync                          # Install dependencies
 uv run alembic upgrade head      # Run migrations
-uv run pytest                    # Run all tests (84 tests)
+uv run pytest                    # Run all tests (100 tests)
 uv run pytest tests/test_foo.py  # Run single test file
 uv run pytest -x                 # Stop on first failure
 uv run uvicorn verdanta.main:app --reload  # Dev server (port 8000)
@@ -114,7 +114,7 @@ npm run type-check               # TypeScript type checking
 
 ## Implemented Features
 
-### Backend (14 route files, ~50 endpoints, 84 tests)
+### Backend (14 route files, ~50 endpoints, 100 tests)
 
 **Core CRUD** — Gardens, Plant Species, Plantings, Settings (fully tested)
 
@@ -142,18 +142,22 @@ npm run type-check               # TypeScript type checking
 - Garden journal/observations with category, tags, mood tracking
 - Soil test recording
 
-### Frontend (9 pages, 8 components, 13 API modules)
+**IoT & Sensors**
+- MQTT sensor integration with auto-discovery and background listener (aiomqtt)
+- Sensor list, status, and health tracking endpoints
+- Manual sensor reading entry
 
-**Pages**: Dashboard, Gardens, Plants (with dossier tabs), Calendar, Weather, Journal, Advisor (streaming chat), Alerts, Settings
+**Photo Diagnosis**
+- LLM-powered photo diagnosis via vision models
+- Context-aware analysis using planting and garden data
 
-**Components**: AppShell (nav/layout), AlertPanel, PhotoUpload, PhotoGallery, HarvestLogger, HarvestChart, JournalEntryForm, JournalFeed
+### Frontend (10 pages, 9 components, 14 API modules)
+
+**Pages**: Dashboard, Gardens, Plants (with dossier tabs), Calendar, Weather, Journal, Sensors, Advisor (streaming chat), Alerts, Settings
+
+**Components**: AppShell (nav/layout), AlertPanel, PhotoUpload, PhotoGallery, PhotoDiagnosis, HarvestLogger, HarvestChart, JournalEntryForm, JournalFeed
 
 **State**: Zustand gardenStore (persisted selection), TanStack React Query v5 (server state, 30s stale time)
-
-### Stub/Not Yet Implemented (501 endpoints)
-- `GET /sensors` — list sensors (Phase 4: MQTT)
-- `GET /sensors/status` — sensor status (Phase 4: MQTT)
-- `POST /advisor/diagnose` — photo diagnosis (Phase 4)
 
 ## Implementation Phases
 
@@ -166,13 +170,13 @@ LLM service with multi-provider support, plant curation pipeline, dossier genera
 ### Phase 3 — Calendar & Weather ✅
 Calendar service with auto-scheduling, weather service with Open-Meteo, weather-responsive rescheduling, GDD/frost calculations, weather alerts.
 
-### Phase 4 — Advisor & IoT ⚠️ In Progress
+### Phase 4 — Advisor & IoT ✅
 - ✅ Garden advisor chat with context assembly and streaming
 - ✅ Proactive alerts (frost, extreme weather, pest/disease)
 - ✅ Interaction history and user feedback
-- ❌ Photo diagnosis via LLM
-- ❌ MQTT sensor integration (sensor_service.py is a stub)
-- ❌ Sensor dashboard
+- ✅ Photo diagnosis via LLM (vision model analysis with context)
+- ✅ MQTT sensor integration (aiomqtt listener, auto-discovery, manual entry)
+- ✅ Sensor dashboard (list, status, readings, manual entry form)
 
 ### Phase 5 — Polish ⚠️ Partially Complete
 - ✅ Photo management (upload, thumbnails, gallery)

@@ -17,6 +17,16 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True)
+def _clear_sensor_registry():
+    """Clear the in-memory sensor registry between tests."""
+    from verdanta.services.sensor_service import _sensor_registry
+
+    _sensor_registry.clear()
+    yield
+    _sensor_registry.clear()
+
+
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
