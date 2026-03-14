@@ -12,6 +12,7 @@ import { useGardenStore } from '../stores/gardenStore';
 import { weatherApi } from '../api/weather';
 import { calendarApi } from '../api/calendar';
 import { journalApi } from '../api/journal';
+import { AlertPanel } from '../components/AlertPanel';
 import { JournalEntryForm } from '../components/JournalEntryForm';
 import { HarvestLogger } from '../components/HarvestLogger';
 import type { CalendarEvent, WeatherRecord } from '../types';
@@ -188,6 +189,15 @@ export const DashboardPage = (): React.ReactElement => {
                   isPending={completeMutation.isPending}
                 />
                 <RecentJournal entries={journalEntries} onNavigate={() => navigate('/journal')} />
+              </div>
+
+              {/* Alerts widget */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">Active Alerts</h3>
+                  <button onClick={() => navigate('/alerts')} className="text-xs text-green-600 hover:text-green-700 font-medium">View all</button>
+                </div>
+                <AlertPanel gardenId={selectedGardenId} compact />
               </div>
 
               {/* Season Progress - full width */}

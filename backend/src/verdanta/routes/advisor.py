@@ -149,14 +149,6 @@ async def chat_stream(
     )
 
 
-@router.get("/gardens/{garden_id}/advisor/alerts", response_model=dict)
-async def get_alerts(
-    garden_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    # TODO: Implement proactive alerts (Phase 4)
-    raise HTTPException(status_code=501, detail="Proactive alerts not yet implemented")
-
 
 @router.post("/plantings/{planting_id}/advisor/diagnose", response_model=dict)
 async def diagnose_photo(

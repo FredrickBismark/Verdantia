@@ -46,3 +46,6 @@ class Garden(Base):
     journal_entries: Mapped[list["JournalEntry"]] = relationship(  # noqa: F821
         back_populates="garden", cascade="all, delete-orphan"
     )
+    alerts: Mapped[list["Alert"]] = relationship(  # noqa: F821
+        back_populates="garden", cascade="all, delete-orphan"
+    )

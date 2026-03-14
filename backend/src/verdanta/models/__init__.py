@@ -1,3 +1,4 @@
+from verdanta.models.alert import Alert
 from verdanta.models.base import Base
 from verdanta.models.garden import Garden
 from verdanta.models.journal import JournalEntry
@@ -10,6 +11,7 @@ from verdanta.models.soil import SoilTest
 from verdanta.models.weather import SensorReading, WeatherRecord
 
 __all__ = [
+    "Alert",
     "Base",
     "Garden",
     "JournalEntry",

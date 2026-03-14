@@ -1,0 +1,212 @@
+================================================================================
+                    VERDANTA — Project Status & Development Plan
+================================================================================
+
+Last updated: 2026-03-14
+
+================================================================================
+  1. PROJECT SUMMARY
+================================================================================
+
+Verdanta is a local-first garden management application with LLM-curated plant
+intelligence. It combines a Python/FastAPI backend with a React/TypeScript
+frontend to help gardeners manage their gardens, track plantings, get AI-powered
+advice, and respond to weather conditions.
+
+Key differentiators:
+  - Local-first: works fully offline; cloud LLM providers are optional
+  - LLM transparency: all AI interactions are logged and inspectable
+  - Weather-integrated scheduling: auto-generates care calendars based on frost
+    dates, GDD, and real-time weather alerts
+  - Multi-provider LLM: supports Ollama, Anthropic, OpenAI, Venice, OpenRouter
+
+================================================================================
+  2. ARCHITECTURE
+================================================================================
+
+Monorepo structure:
+  backend/   — Python 3.11+, FastAPI, SQLAlchemy 2.0 (async), SQLite, Alembic
+  frontend/  — React 18, TypeScript, Vite, TailwindCSS v4, Zustand, React Query
+
+Backend services (business logic layer):
+  - LLMService         — Multi-provider abstraction with streaming
+  - WeatherService     — Open-Meteo integration, GDD, frost dates
+  - CalendarService    — Auto-schedule generation, weather rescheduling
+  - AdvisorService     — Context-assembled LLM garden advisor
+  - PlantCurationService — OpenFarm + LLM dossier generation
+  - AlertService       — Proactive frost/weather/pest alerts
+  - KnowledgeService   — Cross-feature knowledge entries
+  - PhotoService       — Upload, thumbnails, EXIF parsing
+  - SensorService      — MQTT integration (stub)
+
+Database: 13 tables in SQLite with WAL mode, FK constraints, and performance
+indexes on hot query paths.
+
+Frontend: 9 pages connected via React Router v6, 8 reusable components,
+13 API client modules, Zustand for garden selection state, React Query for
+server state management.
+
+================================================================================
+  3. CURRENT IMPLEMENTATION STATUS
+================================================================================
+
+Overall: ~90% feature-complete across all planned phases
+
+BACKEND (14 route files, ~50 endpoints, 84 tests — all passing)
+─────────────────────────────────────────────────────────────────────────────────
+ Module                  Status       Notes
+─────────────────────────────────────────────────────────────────────────────────
+ Gardens CRUD            COMPLETE     Full CRUD, tested
+ Plant Species CRUD      COMPLETE     Search, filtering, dossier detail
+ Plantings CRUD          COMPLETE     Garden-scoped, status lifecycle
+ Settings API            COMPLETE     Key-value store, LLM provider config
+ LLM Service             COMPLETE     6 providers, streaming, connection test
+ Plant Curation          COMPLETE     OpenFarm + LLM dossier (7 sections)
+ Calendar Service        COMPLETE     Auto-schedule, frost-aware, rescheduling
+ Weather Service         COMPLETE     Current/forecast/historical, GDD, frost
+ Advisor Chat            COMPLETE     Context assembly, streaming SSE
+ Alert System            COMPLETE     Frost, extreme weather, pest checks
+ Journal/Observations    COMPLETE     CRUD with categories, tags, mood
+ Harvest Logging         COMPLETE     Per-planting stats, garden summaries
+ Photo Management        COMPLETE     Upload, thumbnails, EXIF
+ Soil Tests              COMPLETE     Record and list
+ Knowledge Entries       COMPLETE     Cross-feature learning store
+ Context Providers       COMPLETE     Protocol-based context assembly
+ Sensor/MQTT             STUB         Only manual entry works (Phase 4)
+ Photo Diagnosis         STUB         501 not implemented (Phase 4)
+─────────────────────────────────────────────────────────────────────────────────
+
+FRONTEND (9 pages, 8 components, 38 TypeScript files)
+─────────────────────────────────────────────────────────────────────────────────
+ Page/Feature            Status       Notes
+─────────────────────────────────────────────────────────────────────────────────
+ Dashboard               COMPLETE     Weather, tasks, journal, season progress
+ Gardens Page             COMPLETE     CRUD with plantings panel
+ Plants Page              COMPLETE     Search, detail view with dossier tabs
+ Calendar Page            COMPLETE     Event list, filtering, schedule gen
+ Weather Page             COMPLETE     Forecast, frost dates, GDD
+ Journal Page             COMPLETE     Feed with filtering, entry form
+ Advisor Page             COMPLETE     Streaming chat, interaction history
+ Alerts Page              COMPLETE     Severity badges, acknowledge/dismiss
+ Settings Page            COMPLETE     LLM provider config, connection test
+ Photo Upload/Gallery     COMPLETE     Upload form, thumbnail grid
+ Harvest Logger/Chart     COMPLETE     Log form, Recharts visualization
+─────────────────────────────────────────────────────────────────────────────────
+
+TEST COVERAGE (84 tests, 100% passing)
+─────────────────────────────────────────────────────────────────────────────────
+ Test File                        Count   Coverage
+─────────────────────────────────────────────────────────────────────────────────
+ test_gardens.py                  6       Garden CRUD
+ test_plants.py                   7       Plant CRUD, search, detail
+ test_plantings.py                7       Planting lifecycle
+ test_settings.py                 3       Settings CRUD
+ test_calendar_service.py         13      Schedule gen, frost, rescheduling
+ test_weather_service.py          18      GDD, frost dates, alerts, sync
+ test_llm_service.py              15      Multi-provider, config, headers
+ test_openfarm_service.py         9       Crop normalization, search
+ test_curation.py                 6       Dossier parsing, curation pipeline
+─────────────────────────────────────────────────────────────────────────────────
+
+================================================================================
+  4. IMPLEMENTATION PHASES
+================================================================================
+
+Phase 1 — Foundation                                              [COMPLETE]
+  Core models, database, CRUD for gardens/plants/plantings/settings,
+  skeleton frontend with navigation.
+
+Phase 2 — Intelligence Layer                                      [COMPLETE]
+  Multi-provider LLM service, plant curation pipeline, dossier generation,
+  OpenFarm integration, knowledge entries.
+
+Phase 3 — Calendar & Weather                                      [COMPLETE]
+  Calendar auto-scheduling from plant data + frost dates, Open-Meteo weather
+  integration, GDD/frost calculations, weather-responsive rescheduling.
+
+Phase 4 — Advisor & IoT                                        [IN PROGRESS]
+  Done: Advisor chat + streaming, proactive alerts, interaction history
+  Remaining: MQTT sensor integration, sensor dashboard, photo diagnosis
+
+Phase 5 — Polish                                             [PARTIAL]
+  Done: Photo management, harvest logging, journal, enriched dashboard
+  Remaining: Season comparisons, import/export, Docker Compose
+
+================================================================================
+  5. RECOMMENDED DEVELOPMENT PATH FORWARD
+================================================================================
+
+The project has strong foundations and most user-facing features are functional.
+The best path forward focuses on completing the remaining gaps, then hardening
+for production use.
+
+PRIORITY 1: Complete Phase 4 — IoT & Diagnosis
+───────────────────────────────────────────────
+  a) Implement sensor_service.py with MQTT integration (aiomqtt)
+     - Subscribe to configurable MQTT topics
+     - Parse and store sensor readings (temperature, humidity, soil moisture)
+     - Auto-create SensorReading records
+  b) Implement sensor list and status endpoints (currently 501)
+  c) Build SensorsPage in frontend with live readings dashboard
+  d) Implement photo diagnosis endpoint — send planting photo to LLM for
+     pest/disease identification, store diagnosis in knowledge entries
+
+PRIORITY 2: Complete Phase 5 — Polish & Production
+──────────────────────────────────────────────────
+  a) Season comparisons — year-over-year harvest analytics, growth timelines
+     using Recharts (data already exists in harvest_logs + plantings)
+  b) Data import/export — JSON export of full garden data, CSV export of
+     harvests/journal, import from backup or other garden apps
+  c) Docker Compose setup — backend + frontend + optional Mosquitto broker,
+     volume mounts for SQLite DB and photo storage
+
+PRIORITY 3: Frontend Hardening
+──────────────────────────────
+  a) Add dedicated React Query hooks for alerts, journal, harvest, weather,
+     and calendar (currently some pages call API functions directly)
+  b) Add proper loading skeletons and error boundaries across all pages
+  c) Add optimistic updates for mutations (especially journal, harvest)
+  d) Mobile-responsive polish for all pages
+  e) Add calendar view using FullCalendar (dependency already included)
+
+PRIORITY 4: Backend Robustness
+──────────────────────────────
+  a) Add route-level integration tests for journal, harvest, photos, alerts,
+     advisor streaming (currently only service-level tests for these)
+  b) Add rate limiting for LLM endpoints
+  c) Add request validation middleware (size limits for photo uploads)
+  d) Add structured logging (currently using print/basic logging)
+
+PRIORITY 5: Quality of Life
+───────────────────────────
+  a) Garden sharing — multi-user support with garden-level permissions
+  b) Push notifications — browser notifications for weather alerts
+  c) Offline sync — service worker for frontend offline capability
+  d) Garden templates — pre-built garden layouts for common setups
+
+================================================================================
+  6. KEY TECHNICAL DECISIONS
+================================================================================
+
+- SQLite chosen for local-first simplicity; WAL mode for concurrent reads
+- Async throughout for non-blocking I/O (weather fetches, LLM calls)
+- APScheduler for background weather sync (configurable interval)
+- Context providers use Python Protocol for clean dependency boundaries
+- LLM responses are always logged for auditability
+- Photo storage is local filesystem (not cloud) to maintain local-first
+- Frontend uses React Query for cache invalidation and stale-while-revalidate
+
+================================================================================
+  7. KNOWN ISSUES & TECH DEBT
+================================================================================
+
+- Plantings route has TODO for auto_generate_events on creation (line 45)
+- sensor_service.py is a 6-line stub
+- No frontend error boundaries
+- Some pages call API functions directly without React Query hooks
+- No structured logging framework (using basic print statements)
+- No rate limiting on LLM endpoints
+- FullCalendar dependency included but not yet used (calendar page is list-based)
+- No Docker or production deployment configuration yet
+
+================================================================================
