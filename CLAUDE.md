@@ -20,20 +20,19 @@ backend/                 # Python backend (FastAPI)
   pyproject.toml         # uv-managed dependencies
 frontend/                # React + TypeScript frontend
   src/
-    components/          # Reusable UI components
-    pages/               # Page-level components (one per nav item)
-    hooks/               # Custom React hooks
-    stores/              # Zustand state stores
-    api/                 # API client functions (TanStack Query)
+    components/          # Reusable UI components (8 components)
+    pages/               # Page-level components (9 pages)
+    hooks/               # Custom React hooks (gardens, plants, plantings)
+    stores/              # Zustand state stores (gardenStore)
+    api/                 # API client functions (13 modules)
     types/               # TypeScript type definitions
-    utils/               # Utility functions
   package.json
 ```
 
 ## Tech Stack
 
-- **Backend**: FastAPI, SQLAlchemy 2.0 (async, mapped_column), SQLite, Alembic, httpx, APScheduler, aiomqtt
-- **Frontend**: React 18, TypeScript, Vite, TailwindCSS v4, Zustand, TanStack React Query v5, FullCalendar, Recharts
+- **Backend**: FastAPI, SQLAlchemy 2.0 (async, mapped_column), SQLite, Alembic, httpx, APScheduler, aiomqtt, Pillow
+- **Frontend**: React 18, TypeScript, Vite, TailwindCSS v4, Zustand, TanStack React Query v5, FullCalendar, Recharts, React Router v6, Lucide React icons
 - **Package management**: `uv` (backend), `npm` (frontend)
 
 ## Commands
@@ -43,7 +42,7 @@ frontend/                # React + TypeScript frontend
 cd backend
 uv sync                          # Install dependencies
 uv run alembic upgrade head      # Run migrations
-uv run pytest                    # Run all tests
+uv run pytest                    # Run all tests (84 tests)
 uv run pytest tests/test_foo.py  # Run single test file
 uv run pytest -x                 # Stop on first failure
 uv run uvicorn verdanta.main:app --reload  # Dev server (port 8000)
@@ -95,13 +94,15 @@ npm run type-check               # TypeScript type checking
 - All migrations via Alembic — never modify schema outside of migrations
 - JSON columns for flexible structured data (companion_plants, custom_fields, raw_data)
 - Cascade deletes configured in relationships, not at DB level
+- Performance indexes on frequently queried columns (weather_records, calendar_events, sensor_readings, llm_interactions, plantings)
 
 ### LLM Integration
 - All LLM calls go through `LLMService` — never call provider APIs directly
 - Provider abstraction: Ollama (default), Anthropic, OpenAI, Venice, OpenRouter, Custom
 - Every LLM interaction is logged to `llm_interactions` table for transparency
-- Context assembly happens in service layer, not in routes
+- Context assembly via `ContextProvider` protocol (garden, planting, weather, species providers)
 - Task-specific model overrides via `AppSettings`
+- Streaming support via SSE for advisor chat
 
 ## Architecture Principles
 
@@ -111,19 +112,82 @@ npm run type-check               # TypeScript type checking
 4. **No magic** — explicit dependency injection via FastAPI `Depends()`, no global mutable state
 5. **Graceful degradation** — if LLM is unavailable, app functions normally without AI features; if weather API is down, use cached data
 
+## Implemented Features
+
+### Backend (14 route files, ~50 endpoints, 84 tests)
+
+**Core CRUD** — Gardens, Plant Species, Plantings, Settings (fully tested)
+
+**Intelligence Layer**
+- Multi-provider LLM service (Ollama, Anthropic, OpenAI, Venice, OpenRouter, Custom)
+- Plant curation pipeline: OpenFarm data fetch → LLM dossier generation (7 sections)
+- Knowledge entries system for cross-feature learning
+
+**Calendar & Weather**
+- Auto-schedule generation from plant dossier data + frost dates
+- Open-Meteo weather integration (current, forecast, historical)
+- GDD calculations, frost date estimation
+- Weather-responsive event rescheduling
+- Weather alert generation (frost, extreme temps, wind)
+
+**Advisor & Alerts**
+- LLM-powered garden advisor chat with streaming (SSE)
+- Context assembly from garden, plantings, weather, species data
+- Proactive alert system (frost, extreme weather, pest/disease)
+- Alert lifecycle: create → acknowledge → dismiss
+
+**Data Capture**
+- Photo upload with thumbnail generation (Pillow) and EXIF parsing
+- Harvest logging with per-planting stats and garden-wide summaries
+- Garden journal/observations with category, tags, mood tracking
+- Soil test recording
+
+### Frontend (9 pages, 8 components, 13 API modules)
+
+**Pages**: Dashboard, Gardens, Plants (with dossier tabs), Calendar, Weather, Journal, Advisor (streaming chat), Alerts, Settings
+
+**Components**: AppShell (nav/layout), AlertPanel, PhotoUpload, PhotoGallery, HarvestLogger, HarvestChart, JournalEntryForm, JournalFeed
+
+**State**: Zustand gardenStore (persisted selection), TanStack React Query v5 (server state, 30s stale time)
+
+### Stub/Not Yet Implemented (501 endpoints)
+- `GET /sensors` — list sensors (Phase 4: MQTT)
+- `GET /sensors/status` — sensor status (Phase 4: MQTT)
+- `POST /advisor/diagnose` — photo diagnosis (Phase 4)
+
 ## Implementation Phases
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation ✅
 Core models, database setup, Garden CRUD, Plant Species CRUD, basic Planting management, Settings API, skeleton frontend with navigation and pages.
 
-### Phase 2 — Intelligence Layer
-LLM service with multi-provider support, plant curation pipeline, dossier generation, OpenFarm integration.
+### Phase 2 — Intelligence Layer ✅
+LLM service with multi-provider support, plant curation pipeline, dossier generation, OpenFarm integration, knowledge entries.
 
-### Phase 3 — Calendar & Weather
-Calendar service with auto-scheduling, weather service with Open-Meteo, weather-responsive rescheduling, GDD/frost calculations.
+### Phase 3 — Calendar & Weather ✅
+Calendar service with auto-scheduling, weather service with Open-Meteo, weather-responsive rescheduling, GDD/frost calculations, weather alerts.
 
-### Phase 4 — Advisor & IoT
-Garden advisor chat with context assembly, proactive alerts, photo diagnosis, MQTT sensor integration, sensor dashboard.
+### Phase 4 — Advisor & IoT ⚠️ In Progress
+- ✅ Garden advisor chat with context assembly and streaming
+- ✅ Proactive alerts (frost, extreme weather, pest/disease)
+- ✅ Interaction history and user feedback
+- ❌ Photo diagnosis via LLM
+- ❌ MQTT sensor integration (sensor_service.py is a stub)
+- ❌ Sensor dashboard
 
-### Phase 5 — Polish
-Photo management, harvest logging, data visualization, season comparisons, import/export, Docker Compose setup.
+### Phase 5 — Polish ⚠️ Partially Complete
+- ✅ Photo management (upload, thumbnails, gallery)
+- ✅ Harvest logging with stats and charts
+- ✅ Garden journal/observations
+- ✅ Dashboard with weather, tasks, journal, season progress
+- ❌ Season comparisons / year-over-year analytics
+- ❌ Data import/export
+- ❌ Docker Compose setup
+
+## Next Steps (Recommended Development Path)
+
+1. **Complete Phase 4 IoT** — Implement MQTT sensor service, sensor list/status endpoints, sensor dashboard page
+2. **Photo diagnosis** — Wire up LLM image analysis for plant disease/pest identification
+3. **Season comparisons** — Add year-over-year harvest and growth analytics with Recharts
+4. **Import/Export** — Garden data export (JSON/CSV) and import for backup/migration
+5. **Docker Compose** — Production deployment with backend, frontend, and optional Mosquitto broker
+6. **Frontend polish** — Add missing React Query hooks for alerts, journal, harvest, weather, calendar; add loading/error states across all pages
